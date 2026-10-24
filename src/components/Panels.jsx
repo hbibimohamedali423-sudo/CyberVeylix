@@ -87,12 +87,34 @@ export function VulnCard({ vulns, onAdd }) {
   )
 }
 
-export const ThreatsCard = () => (
-  <div className="card">
-    <h3>Évolution des menaces <span className="sel">7 jours ⌄</span></h3>
-    <svg viewBox="0 0 300 150" style={{ width: '100%', marginTop: 8 }}>
-      <g stroke="#14304f"><path d="M30 116h260M30 90h260M30 64h260M30 38h260M30 12h260" /></g>
-      <text x="160" y="70" textAnchor="middle" fill="#8fa6c0" fontSize="10">Aucune donnée</text>
-    </svg>
-  </div>
-)
+export function ThreatsCard({ threats }) {
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() - (6 - i))
+    return d
+  })
+  const key = (d) => new Date(d).toDateString()
+  const counts = days.map((d) => threats.filter((t) => key(t.created_at) === key(d)).length)
+  const top = Math.max(10, Math.ceil(Math.max(...counts) / 10) * 10)
+  const empty = !counts.some(Boolean)
+  return (
+    <div className="card">
+      <h3>Évolution des menaces <span className="sel">7 jours ⌄</span></h3>
+      <svg viewBox="0 0 300 150" style={{ width: '100%', marginTop: 8 }}>
+        <g stroke="#14304f"><path d="M30 116h260M30 66h260M30 16h260" /></g>
+        <g fill="#8fa6c0" fontSize="9"><text x="2" y="19">{top}</text><text x="2" y="69">{top / 2}</text><text x="6" y="119">0</text></g>
+        {counts.map((n, i) => {
+          const h = (n / top) * 100
+          return <rect key={i} x={36 + i * 37} y={116 - h} width="28" height={h} fill="#2f6df0" />
+        })}
+        {days.map((d, i) => (
+          <text key={i} x={36 + i * 37 + 14} y="132" textAnchor="middle" fill="#8fa6c0" fontSize="8">
+            {d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+          </text>
+        ))}
+        {empty && <text x="160" y="70" textAnchor="middle" fill="#8fa6c0" fontSize="10">Aucune donnée</text>}
+      </svg>
+    </div>
+  )
+}

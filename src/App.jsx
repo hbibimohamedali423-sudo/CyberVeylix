@@ -7,16 +7,18 @@ import RightColumn from './components/RightColumn'
 import Modal from './components/Modal'
 import Login from './components/Login'
 import { Banner, Kpis, NetworkMap, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
-import { TYPES, STATUS, SEV } from './constants'
+import { TYPES, STATUS, SEV, CATS } from './constants'
 
 function Dashboard({ user }) {
   const dev = useRows('devices', user)
   const vul = useRows('vulnerabilities', user)
+  const alr = useRows('alerts', user)
+  const thr = useRows('threats', user)
   const [modal, setModal] = useState(null)
   const close = () => setModal(null)
   const label = (list, k) => list.find((x) => x.k === k)?.label
   const vulns = vul.rows.map((v) => ({ ...v, sev: v.severity }))
-  const error = dev.error || vul.error
+  const error = dev.error || vul.error || alr.error || thr.error
 
   return (
     <>
@@ -25,7 +27,7 @@ function Dashboard({ user }) {
         <Sidebar />
         <main className="main">
           <Banner />
-          <Kpis counts={[dev.rows.length, 0, vul.rows.length, 0]} />
+          <Kpis counts={[dev.rows.length, thr.rows.filter((t) => t.blocked).length, vul.rows.length, 0]} />
           <section className="mid">
             <NetworkMap devices={dev.rows} onAdd={() => setModal('dev')} />
             <Activity />
@@ -33,10 +35,10 @@ function Dashboard({ user }) {
           <section className="bot">
             <DevicesCard devices={dev.rows} />
             <VulnCard vulns={vulns} onAdd={() => setModal('vul')} />
-            <ThreatsCard />
+            <ThreatsCard threats={thr.rows} />
           </section>
         </main>
-        <RightColumn />
+        <RightColumn alerts={alr.rows} threats={thr.rows} onAddAlert={() => setModal('alr')} onAddThreat={() => setModal('thr')} />
       </div>
       <footer>
         <span>CyberVeylix ✦ v1.0.0 &nbsp;&nbsp; Network Intelligence &amp; Cybersecurity</span>
@@ -56,6 +58,20 @@ function Dashboard({ user }) {
           rows={vulns.map((v) => `${label(SEV, v.sev)} · ${v.title}`)}
           onAdd={(f) => vul.add({ title: f.title.trim(), severity: f.sev })}
           onRemove={vul.remove} />
+      )}
+      {modal === 'alr' && (
+        <Modal title="Alertes" onClose={close}
+          fields={[{ k: 'title', ph: 'Titre de l’alerte' }, { k: 'detail', ph: 'Détail (facultatif)' }, { k: 'severity', opts: SEV.map((s) => [s.k, s.label]) }]}
+          rows={alr.rows.map((a) => `${label(SEV, a.severity)} · ${a.title}`)}
+          onAdd={(f) => alr.add({ title: f.title.trim(), detail: f.detail.trim() || null, severity: f.severity })}
+          onRemove={alr.remove} />
+      )}
+      {modal === 'thr' && (
+        <Modal title="Menaces" onClose={close}
+          fields={[{ k: 'category', opts: CATS.map((c) => [c.k, c.label]) }, { k: 'blocked', opts: [['1', 'Bloquée'], ['0', 'Non bloquée']] }]}
+          rows={thr.rows.map((t) => `${label(CATS, t.category)} · ${t.blocked ? 'Bloquée' : 'Non bloquée'} · ${new Date(t.created_at).toLocaleDateString('fr-FR')}`)}
+          onAdd={(f) => thr.add({ category: f.category, blocked: f.blocked === '1' })}
+          onRemove={thr.remove} />
       )}
     </>
   )

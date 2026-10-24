@@ -18,3 +18,10 @@ export const SEV = [
   { k: 'l', label: 'Basse', color: '#8fa6c0' },
 ]
 export const SLOTS = [[300,150],[380,190],[230,200],[340,240],[420,130],[190,250],[300,290],[450,200],[260,130],[390,260],[340,100],[480,250]]
+export const CATS = [
+  { k: 'intrusion', label: 'Tentatives d’intrusion', color: '#ff3b4e' },
+  { k: 'malware', label: 'Malware / Ransomware', color: '#ff9a2e' },
+  { k: 'scan', label: 'Scan de ports', color: '#2a8fe0' },
+  { k: 'c2', label: 'C2 / Command & Control', color: '#9b5cff' },
+  { k: 'autre', label: 'Autres', color: '#6a8cff' },
+]
