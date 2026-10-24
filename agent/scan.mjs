@@ -115,6 +115,17 @@ const guessType = (p) =>
       : p.some((x) => [22, 80, 443, 53, 3306, 5432, 1433, 8080, 8443].includes(x)) ? 'Serveur'
         : 'Poste'
 
+const SENSITIVE = {
+  21: ['h', 'FTP, non chiffré'],
+  23: ['h', 'Telnet, non chiffré'],
+  3389: ['m', 'Bureau à distance RDP'],
+  5900: ['h', 'VNC, accès à distance'],
+  1433: ['m', 'base de données SQL Server'],
+  3306: ['m', 'base de données MySQL'],
+  5432: ['m', 'base de données PostgreSQL'],
+}
+const NO_ALERTS = args.includes('--no-alerts')
+
 const must = (r) => {
   if (r.error) {
     const hint = /column|relation|schema/i.test(r.error.message) ? ' (avez-vous exécuté supabase/schema_scan.sql ?)' : ''
@@ -180,17 +191,33 @@ const existing = must(await sb.from('devices').select('id,ip,status')) || []
 const byIp = new Map()
 for (const d of existing) if (d.ip && !byIp.has(d.ip)) byIp.set(d.ip, d)
 const now = new Date().toISOString()
+// Premier inventaire de cette plage : on enregistre tout comme référence, sans créer d'alertes.
+const baseline = !existing.some((d) => d.ip && inRange(d.ip))
+const alerts = []
 
 for (const h of alive) {
   const ex = byIp.get(h.ip)
+  const who = `${h.ip}${h.name ? ' — ' + h.name : ''}`
   let id
+  let prev = []
   if (ex) {
     must(await sb.from('devices').update({ status: 'on', mac: h.mac, last_seen: now }).eq('id', ex.id))
     id = ex.id
+    prev = (must(await sb.from('services').select('port').eq('device_id', id)) || []).map((x) => x.port)
   } else {
     id = must(await sb.from('devices')
       .insert({ name: h.name || h.ip, ip: h.ip, mac: h.mac, type: guessType(h.ports), status: 'on', last_seen: now })
       .select('id').single()).id
+    if (!baseline) {
+      alerts.push({ title: 'Nouvel appareil détecté', detail: `${who}${h.mac ? ' (' + h.mac + ')' : ''}`, severity: 'm' })
+    }
+  }
+  if (!baseline) {
+    for (const p of h.ports) {
+      if (SENSITIVE[p] && !prev.includes(p)) {
+        alerts.push({ title: `Port ${p} ouvert (${SENSITIVE[p][1]})`, detail: who, severity: SENSITIVE[p][0] })
+      }
+    }
   }
   must(await sb.from('services').delete().eq('device_id', id))
   if (h.ports.length) {
@@ -205,6 +232,16 @@ for (const d of existing) {
     must(await sb.from('devices').update({ status: 'off' }).eq('id', d.id))
     off++
   }
+}
+
+if (baseline) {
+  console.log('    Premier inventaire : aucune alerte créée (référence de départ).')
+} else if (alerts.length && !NO_ALERTS) {
+  const r = await sb.from('alerts').insert(alerts)
+  if (r.error) console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_alerts.sql ?)')
+  else console.log(`    ${alerts.length} alerte(s) créée(s)`)
+} else {
+  console.log('    Aucune nouvelle alerte.')
 }
 
 await sb.auth.signOut()

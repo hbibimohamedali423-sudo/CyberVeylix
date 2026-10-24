@@ -8,6 +8,13 @@ Inventorie les appareils de **votre** réseau local et les envoie à votre compt
 - Met à jour `devices` (statut, MAC, dernier vu) et `services` (ports ouverts).
 - Les appareils de la plage non vus passent « Hors ligne ».
 
+## Alertes automatiques
+- « Nouvel appareil détecté » quand une adresse inconnue apparaît.
+- « Port … ouvert » quand un port sensible (Telnet, FTP, RDP, VNC, bases de données) s'ouvre sur un appareil.
+- Le premier inventaire d'une plage sert de référence : aucune alerte n'est créée.
+- `--no-alerts` désactive les alertes pour un lancement.
+- `--check` vérifie la configuration et la connexion sans scanner.
+
 ## Ce qu'il ne fait pas
 Il ne détecte pas de vulnérabilités (CVE) et ne bloque aucune menace.
 
