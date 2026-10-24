@@ -4,7 +4,7 @@ import './DevicesPage.css'
 
 const validIp = (v) => !v || (/^(\d{1,3}\.){3}\d{1,3}$/.test(v) && v.split('.').every((n) => Number(n) <= 255))
 
-export default function DevicesPage({ devices, onAddClick, onUpdate, onRemove }) {
+export default function DevicesPage({ devices, services = [], onAddClick, onUpdate, onRemove }) {
   const [q, setQ] = useState('')
   const [st, setSt] = useState('')
   const [editId, setEditId] = useState(null)
@@ -15,6 +15,9 @@ export default function DevicesPage({ devices, onAddClick, onUpdate, onRemove })
     const hay = `${d.name} ${d.ip || ''} ${d.type}`.toLowerCase()
     return hay.includes(q.trim().toLowerCase()) && (!st || d.status === st)
   })
+
+  const ports = (d) => services.filter((s) => s.device_id === d.id).map((s) => s.port).join(', ') || '—'
+  const seen = (d) => (d.last_seen ? new Date(d.last_seen).toLocaleString('fr-FR') : '—')
 
   const startEdit = (d) => {
     setEditId(d.id)
@@ -49,7 +52,7 @@ export default function DevicesPage({ devices, onAddClick, onUpdate, onRemove })
       {err && <div className="err">{err}</div>}
       <div className="tw">
         <table className="dt">
-          <thead><tr><th>Nom</th><th>Adresse IP</th><th>Type</th><th>Statut</th><th>Ajouté le</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Nom</th><th>Adresse IP</th><th>Type</th><th>Statut</th><th>Ports ouverts</th><th>Dernier vu</th><th>Actions</th></tr></thead>
           <tbody>
             {list.map((d) => {
               const s = STATUS.find((x) => x.k === d.status)
@@ -59,16 +62,16 @@ export default function DevicesPage({ devices, onAddClick, onUpdate, onRemove })
                   <td><input value={draft.ip} onChange={set('ip')} placeholder="192.168.1.10" /></td>
                   <td><select value={draft.type} onChange={set('type')}>{Object.keys(TYPES).map((t) => <option key={t}>{t}</option>)}</select></td>
                   <td><select value={draft.status} onChange={set('status')}>{STATUS.map((x) => <option key={x.k} value={x.k}>{x.label}</option>)}</select></td>
-                  <td>{new Date(d.created_at).toLocaleDateString('fr-FR')}</td>
+                  <td>{ports(d)}</td><td>{seen(d)}</td>
                   <td><button onClick={save}>Enregistrer</button><button className="x" onClick={() => { setEditId(null); setErr('') }}>Annuler</button></td>
                 </tr>
               ) : (
                 <tr key={d.id}>
                   <td>{d.name}</td>
-                  <td>{d.ip || '—'}</td>
+                  <td>{d.ip || '—'}{d.mac && <div className="m">{d.mac}</div>}</td>
                   <td>{d.type}</td>
                   <td style={{ color: s.color }}>● {s.label}</td>
-                  <td>{new Date(d.created_at).toLocaleDateString('fr-FR')}</td>
+                  <td>{ports(d)}</td><td>{seen(d)}</td>
                   <td><button className="x" onClick={() => startEdit(d)}>Modifier</button><button className="del" onClick={() => del(d)}>Supprimer</button></td>
                 </tr>
               )

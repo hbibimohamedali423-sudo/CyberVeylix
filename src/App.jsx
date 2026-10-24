@@ -15,12 +15,13 @@ function Dashboard({ user }) {
   const vul = useRows('vulnerabilities', user)
   const alr = useRows('alerts', user)
   const thr = useRows('threats', user)
+  const srv = useRows('services', user)
   const [modal, setModal] = useState(null)
   const [page, setPage] = useState(0)
   const close = () => setModal(null)
   const label = (list, k) => list.find((x) => x.k === k)?.label
   const vulns = vul.rows.map((v) => ({ ...v, sev: v.severity }))
-  const error = dev.error || vul.error || alr.error || thr.error
+  const error = dev.error || vul.error || alr.error || thr.error || srv.error
 
   return (
     <>
@@ -30,7 +31,7 @@ function Dashboard({ user }) {
         {page === 0 ? (<>
         <main className="main">
           <Banner />
-          <Kpis counts={[dev.rows.length, thr.rows.filter((t) => t.blocked).length, vul.rows.length, 0]} />
+          <Kpis counts={[dev.rows.length, thr.rows.filter((t) => t.blocked).length, vul.rows.length, srv.rows.length]} />
           <section className="mid">
             <NetworkMap devices={dev.rows} onAdd={() => setModal('dev')} />
             <Activity />
@@ -44,7 +45,7 @@ function Dashboard({ user }) {
         <RightColumn alerts={alr.rows} threats={thr.rows} onAddAlert={() => setModal('alr')} onAddThreat={() => setModal('thr')} />
         </>) : page === 1 ? (
           <main className="main wide">
-            <DevicesPage devices={dev.rows} onAddClick={() => setModal('dev')} onUpdate={dev.update} onRemove={dev.remove} />
+            <DevicesPage devices={dev.rows} services={srv.rows} onAddClick={() => setModal('dev')} onUpdate={dev.update} onRemove={dev.remove} />
           </main>
         ) : (
           <main className="main wide">

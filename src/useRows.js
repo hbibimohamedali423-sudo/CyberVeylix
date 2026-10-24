@@ -13,7 +13,10 @@ export default function useRows(table, user) {
   }, [table])
 
   useEffect(() => {
-    if (user) load()
+    if (!user) return
+    load()
+    const t = setInterval(load, 15000)
+    return () => clearInterval(t)
   }, [user, load])
 
   const add = async (row) => {
