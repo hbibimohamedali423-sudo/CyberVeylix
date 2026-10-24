@@ -1,33 +1,37 @@
-import { useState } from 'react'
-import useStored from './useStored'
+import { useEffect, useState } from 'react'
+import { supabase, configured } from './supabaseClient'
+import useRows from './useRows'
 import Topbar from './components/Topbar'
 import Sidebar from './components/Sidebar'
 import RightColumn from './components/RightColumn'
 import Modal from './components/Modal'
+import Login from './components/Login'
 import { Banner, Kpis, NetworkMap, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
 import { TYPES, STATUS, SEV } from './constants'
 
-export default function App() {
-  const [devices, setDevices] = useStored('cv_dev')
-  const [vulns, setVulns] = useStored('cv_vul')
+function Dashboard({ user }) {
+  const dev = useRows('devices', user)
+  const vul = useRows('vulnerabilities', user)
   const [modal, setModal] = useState(null)
   const close = () => setModal(null)
   const label = (list, k) => list.find((x) => x.k === k)?.label
+  const vulns = vul.rows.map((v) => ({ ...v, sev: v.severity }))
+  const error = dev.error || vul.error
 
   return (
     <>
-      <Topbar />
+      <Topbar email={user.email} onLogout={() => supabase.auth.signOut()} />
       <div className="wrap">
         <Sidebar />
         <main className="main">
           <Banner />
-          <Kpis counts={[devices.length, 0, vulns.length, 0]} />
+          <Kpis counts={[dev.rows.length, 0, vul.rows.length, 0]} />
           <section className="mid">
-            <NetworkMap devices={devices} onAdd={() => setModal('dev')} />
+            <NetworkMap devices={dev.rows} onAdd={() => setModal('dev')} />
             <Activity />
           </section>
           <section className="bot">
-            <DevicesCard devices={devices} />
+            <DevicesCard devices={dev.rows} />
             <VulnCard vulns={vulns} onAdd={() => setModal('vul')} />
             <ThreatsCard />
           </section>
@@ -36,21 +40,54 @@ export default function App() {
       </div>
       <footer>
         <span>CyberVeylix ✦ v1.0.0 &nbsp;&nbsp; Network Intelligence &amp; Cybersecurity</span>
-        <span><span className="dot" style={{ background: '#5d7390' }} />Aucune source de données connectée</span>
+        <span><span className="dot" style={error ? { background: 'var(--r)' } : undefined} />{error || 'Connecté à Supabase'}</span>
       </footer>
       {modal === 'dev' && (
         <Modal title="Appareils" onClose={close}
           fields={[{ k: 'name', ph: 'Nom de l’appareil' }, { k: 'ip', ph: 'Adresse IP (ex. 192.168.1.10)' },
             { k: 'type', opts: Object.keys(TYPES).map((t) => [t, t]) }, { k: 'status', opts: STATUS.map((s) => [s.k, s.label]) }]}
-          rows={devices.map((d) => `${d.name} · ${d.ip || '—'} · ${label(STATUS, d.status)}`)}
-          onAdd={(f) => setDevices([...devices, f])} onRemove={(i) => setDevices(devices.filter((_, j) => j !== i))} />
+          rows={dev.rows.map((d) => `${d.name} · ${d.ip || '—'} · ${label(STATUS, d.status)}`)}
+          onAdd={(f) => dev.add({ name: f.name.trim(), ip: f.ip.trim() || null, type: f.type, status: f.status })}
+          onRemove={dev.remove} />
       )}
       {modal === 'vul' && (
         <Modal title="Vulnérabilités" onClose={close}
           fields={[{ k: 'title', ph: 'Titre ou CVE (ex. CVE-2024-6387)' }, { k: 'sev', opts: SEV.map((s) => [s.k, s.label]) }]}
           rows={vulns.map((v) => `${label(SEV, v.sev)} · ${v.title}`)}
-          onAdd={(f) => setVulns([...vulns, f])} onRemove={(i) => setVulns(vulns.filter((_, j) => j !== i))} />
+          onAdd={(f) => vul.add({ title: f.title.trim(), severity: f.sev })}
+          onRemove={vul.remove} />
       )}
     </>
   )
+}
+
+function Setup() {
+  return (
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', padding: 16 }}>
+      <div className="card" style={{ width: 'min(480px, 100%)' }}>
+        <h3>Configuration requise</h3>
+        <p className="m" style={{ marginTop: 10 }}>
+          Créez un fichier <b>.env</b> à la racine du projet (voir .env.example) avec VITE_SUPABASE_URL et
+          VITE_SUPABASE_ANON_KEY, puis relancez <b>npm run dev</b>.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+export default function App() {
+  const [session, setSession] = useState(null)
+  const [ready, setReady] = useState(!configured)
+
+  useEffect(() => {
+    if (!configured) return
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true) })
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  if (!configured) return <Setup />
+  if (!ready) return <p className="m" style={{ padding: 24 }}>Chargement…</p>
+  if (!session) return <Login />
+  return <Dashboard user={session.user} />
 }
