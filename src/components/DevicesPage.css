@@ -1,0 +1,15 @@
+.wide{grid-column:2 / -1}
+.tb{display:flex;gap:10px;margin:12px 0}
+.tb input{flex:1;margin:0}
+.tb select{width:180px;margin:0}
+.tb button{width:auto;margin:0;padding:9px 16px;white-space:nowrap}
+.tw{overflow-x:auto}
+.dt{width:100%;border-collapse:collapse;font-size:13px}
+.dt thead th{text-align:left;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b)}
+.dt tbody td{text-align:left;color:var(--t);padding:10px 8px;border-bottom:1px solid #0d2a46}
+.dt input,.dt select{margin:0;padding:5px 6px;font-size:12px;width:100%;min-width:90px}
+.dt button{width:auto;margin:0 6px 0 0;padding:4px 10px;font-size:12px}
+.dt button.x{background:#12304e}
+.dt button.del{background:#5a1a24}
+.err{color:var(--r);margin:6px 0;font-size:12px}
+@media(max-width:1100px){.wide{grid-column:auto}.tb{flex-wrap:wrap}.tb select{width:100%}}

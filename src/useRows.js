@@ -28,5 +28,11 @@ export default function useRows(table, user) {
     else load()
   }
 
-  return { rows, error, add, remove }
+  const update = async (id, patch) => {
+    const { error: e } = await supabase.from(table).update(patch).eq('id', id)
+    if (e) setError(e.message)
+    else load()
+  }
+
+  return { rows, error, add, remove, update }
 }

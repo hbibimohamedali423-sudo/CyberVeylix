@@ -7,7 +7,8 @@ import RightColumn from './components/RightColumn'
 import Modal from './components/Modal'
 import Login from './components/Login'
 import { Banner, Kpis, NetworkMap, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
-import { TYPES, STATUS, SEV, CATS } from './constants'
+import DevicesPage from './components/DevicesPage'
+import { TYPES, STATUS, SEV, CATS, NAV } from './constants'
 
 function Dashboard({ user }) {
   const dev = useRows('devices', user)
@@ -15,6 +16,7 @@ function Dashboard({ user }) {
   const alr = useRows('alerts', user)
   const thr = useRows('threats', user)
   const [modal, setModal] = useState(null)
+  const [page, setPage] = useState(0)
   const close = () => setModal(null)
   const label = (list, k) => list.find((x) => x.k === k)?.label
   const vulns = vul.rows.map((v) => ({ ...v, sev: v.severity }))
@@ -24,7 +26,8 @@ function Dashboard({ user }) {
     <>
       <Topbar email={user.email} onLogout={() => supabase.auth.signOut()} />
       <div className="wrap">
-        <Sidebar />
+        <Sidebar active={page} onChange={setPage} />
+        {page === 0 ? (<>
         <main className="main">
           <Banner />
           <Kpis counts={[dev.rows.length, thr.rows.filter((t) => t.blocked).length, vul.rows.length, 0]} />
@@ -39,6 +42,15 @@ function Dashboard({ user }) {
           </section>
         </main>
         <RightColumn alerts={alr.rows} threats={thr.rows} onAddAlert={() => setModal('alr')} onAddThreat={() => setModal('thr')} />
+        </>) : page === 1 ? (
+          <main className="main wide">
+            <DevicesPage devices={dev.rows} onAddClick={() => setModal('dev')} onUpdate={dev.update} onRemove={dev.remove} />
+          </main>
+        ) : (
+          <main className="main wide">
+            <div className="card"><h3>{NAV[page]}</h3><p className="m" style={{ padding: '22px 0' }}>Cette section est en cours de développement.</p></div>
+          </main>
+        )}
       </div>
       <footer>
         <span>CyberVeylix ✦ v1.0.0 &nbsp;&nbsp; Network Intelligence &amp; Cybersecurity</span>
