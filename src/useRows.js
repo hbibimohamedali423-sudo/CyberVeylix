@@ -25,14 +25,16 @@ export default function useRows(table, user) {
 
   const add = async (row) => {
     const { error: e } = await supabase.from(table).insert(row)
-    if (e) setError(e.message)
-    else load()
+    if (e) { setError(e.message); return e.message }
+    load()
+    return null
   }
 
   const remove = async (i) => {
     const { error: e } = await supabase.from(table).delete().eq('id', rows[i].id)
-    if (e) setError(e.message)
-    else load()
+    if (e) { setError(e.message); return e.message }
+    load()
+    return null
   }
 
   // Renvoie null si la mise à jour réussit, sinon le message d’erreur Supabase.

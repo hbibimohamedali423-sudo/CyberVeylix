@@ -9,6 +9,7 @@ import Login from './components/Login'
 import { Banner, Kpis, NetworkMap, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
 import DevicesPage from './components/DevicesPage'
 import AlertsPage from './components/AlertsPage'
+import VulnsPage from './components/VulnsPage'
 import { TYPES, STATUS, SEV, CATS, NAV } from './constants'
 
 function Dashboard({ user }) {
@@ -21,7 +22,6 @@ function Dashboard({ user }) {
   const [page, setPage] = useState(0)
   const close = () => setModal(null)
   const label = (list, k) => list.find((x) => x.k === k)?.label
-  const vulns = vul.rows.map((v) => ({ ...v, sev: v.severity }))
   const error = dev.error || vul.error || alr.error || thr.error || srv.error
   const connected = !error
   const lastScan = dev.rows.reduce((latest, d) => {
@@ -37,14 +37,14 @@ function Dashboard({ user }) {
         {page === 0 ? (<>
         <main className="main">
           <Banner />
-          <Kpis counts={[dev.loaded ? dev.rows.length : null, thr.loaded ? thr.rows.filter((t) => t.blocked).length : null, vul.loaded ? vul.rows.length : null, srv.loaded ? srv.rows.length : null]} />
+          <Kpis counts={[dev.loaded ? dev.rows.length : null, thr.loaded ? thr.rows.filter((t) => t.blocked).length : null, vul.loaded ? vul.rows.filter((v) => (v.status || 'open') !== 'resolved').length : null, srv.loaded ? srv.rows.length : null]} />
           <section className="mid">
             <NetworkMap devices={dev.rows} onAdd={() => setModal('dev')} />
             <Activity />
           </section>
           <section className="bot">
             <DevicesCard devices={dev.rows} />
-            <VulnCard vulns={vulns} onAdd={() => setModal('vul')} />
+            <VulnCard vulns={vul.rows} onAdd={() => setPage(3)} />
             <ThreatsCard threats={thr.rows} />
           </section>
         </main>
@@ -52,6 +52,10 @@ function Dashboard({ user }) {
         </>) : page === 1 ? (
           <main className="main wide">
             <DevicesPage devices={dev.rows} services={srv.rows} onAddClick={() => setModal('dev')} onUpdate={dev.update} onRemove={dev.remove} />
+          </main>
+        ) : page === 3 ? (
+          <main className="main wide">
+            <VulnsPage vulns={vul.rows} devices={dev.rows} onAdd={vul.add} onUpdate={vul.update} onRemove={vul.remove} />
           </main>
         ) : page === 4 ? (
           <main className="main wide">
@@ -74,13 +78,6 @@ function Dashboard({ user }) {
           rows={dev.rows.map((d) => `${d.name} · ${d.ip || '—'} · ${label(STATUS, d.status)}`)}
           onAdd={(f) => dev.add({ name: f.name.trim(), ip: f.ip.trim() || null, type: f.type, status: f.status })}
           onRemove={dev.remove} />
-      )}
-      {modal === 'vul' && (
-        <Modal title="Vulnérabilités" onClose={close}
-          fields={[{ k: 'title', ph: 'Titre ou CVE (ex. CVE-2024-6387)' }, { k: 'sev', opts: SEV.map((s) => [s.k, s.label]) }]}
-          rows={vulns.map((v) => `${label(SEV, v.sev)} · ${v.title}`)}
-          onAdd={(f) => vul.add({ title: f.title.trim(), severity: f.sev })}
-          onRemove={vul.remove} />
       )}
       {modal === 'alr' && (
         <Modal title="Alertes" onClose={close}

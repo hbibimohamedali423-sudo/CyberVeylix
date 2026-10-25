@@ -86,10 +86,11 @@ export function DevicesCard({ devices }) {
 }
 
 export function VulnCard({ vulns, onAdd }) {
-  const items = SEV.map((s) => ({ ...s, n: vulns.filter((v) => v.sev === s.k).length }))
+  const unresolved = vulns.filter((v) => (v.status || 'open') !== 'resolved')
+  const items = SEV.map((s) => ({ ...s, n: unresolved.filter((v) => v.severity === s.k).length }))
   return (
     <div className="card">
-      <h3>Vulnérabilités par sévérité <span className="sel" style={{ cursor: 'pointer' }} title="Ajouter une vulnérabilité" onClick={onAdd}>+</span></h3>
+      <h3>Vulnérabilités par sévérité <span className="m" style={{ fontWeight: 400 }}>· non résolues</span> <span className="sel" style={{ cursor: 'pointer' }} title="Ajouter une vulnérabilité" onClick={onAdd}>+</span></h3>
       <div className="don"><Donut items={items} /><Legend items={items} /></div>
     </div>
   )
