@@ -44,7 +44,7 @@ export function NetworkMap({ devices, onAdd }) {
         <div><i style={{ background: 'var(--r)' }} />{t('map.threat')}</div>
       </div>
       <svg className="mapsvg" viewBox="0 0 600 340" preserveAspectRatio="xMidYMid slice">
-        <g style={{ fill: 'var(--map-land)', stroke: 'var(--map-stroke)' }} opacity=".6"><path d="M150 200l120-70 150 70-120 80z" /><path d="M270 130l120-60 140 60-110 70z" /><path d="M220 270l110-60 120 60-110 55z" /></g>
+        <g style={{ fill: 'var(--map-land)', stroke: 'var(--map-stroke)', opacity: 'var(--map-opacity)' }}><path d="M150 200l120-70 150 70-120 80z" /><path d="M270 130l120-60 140 60-110 70z" /><path d="M220 270l110-60 120 60-110 55z" /></g>
         {!devices.length && <text x="300" y="200" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="14">{t('map.noDevices')}</text>}
         {devices.map((d, i) => {
           const [x, y] = SLOTS[i % SLOTS.length]

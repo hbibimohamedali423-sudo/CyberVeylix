@@ -11,5 +11,5 @@
 .dt button{width:auto;margin:0;margin-inline-end:6px;padding:4px 10px;font-size:12px}
 .dt button.x{background:var(--surface2);color:var(--t)}
 .dt button.del{background:var(--danger-bg);color:var(--t)}
-.err{color:var(--r);margin:6px 0;font-size:12px}
+.err{color:var(--danger-ink);margin:6px 0;font-size:12px}
 @media(max-width:1100px){.wide{grid-column:auto}.tb{flex-wrap:wrap}.tb select{width:100%}}

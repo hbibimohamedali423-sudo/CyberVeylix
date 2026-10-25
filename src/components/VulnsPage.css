@@ -3,12 +3,12 @@
 .vulns-page .vulns-form label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--m)}
 .vulns-page .vulns-form label.note{grid-column:1 / -1}
 .vulns-page .vulns-form input,.vulns-page .vulns-form select,.vulns-page .vulns-form textarea{margin:0;width:100%}
-.vulns-page .vulns-form textarea{min-height:64px;resize:vertical;background:var(--surface);color:var(--t);border:1px solid var(--b);border-radius:6px;padding:9px 10px;font:inherit}
+.vulns-page .vulns-form textarea{min-height:64px;resize:vertical;background:var(--input-bg);color:var(--t);border:1px solid var(--input-border);border-radius:6px;padding:9px 10px;font:inherit}
 .vulns-page .vulns-form button{width:auto;justify-self:start;margin:0;padding:9px 16px}
 .vulns-page .vulns-bar{display:flex;flex-wrap:wrap;gap:14px;margin:12px 0}
 .vulns-page .vulns-bar label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--m)}
 .vulns-page .vulns-bar select{width:200px;margin:0}
-.vulns-page .vulns-err{color:var(--r);margin:6px 0;font-size:12px}
+.vulns-page .vulns-err{color:var(--danger-ink);margin:6px 0;font-size:12px}
 .vulns-page .vulns-tw{overflow-x:auto}
 .vulns-page .vulns-dt{width:100%;border-collapse:collapse;font-size:13px}
 .vulns-page .vulns-dt thead th{text-align:start;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b);white-space:nowrap}
@@ -16,7 +16,7 @@
 .vulns-page .vulns-dt .note{color:var(--m);max-width:220px}
 .vulns-page .vulns-dt .acts{white-space:nowrap}
 .vulns-page .vulns-dt input,.vulns-page .vulns-dt select,.vulns-page .vulns-dt textarea{margin:0;font-size:12px;width:100%;min-width:110px}
-.vulns-page .vulns-dt textarea{min-height:52px;resize:vertical;background:var(--surface);color:var(--t);border:1px solid var(--b);border-radius:6px;padding:5px 6px;font:inherit}
+.vulns-page .vulns-dt textarea{min-height:52px;resize:vertical;background:var(--input-bg);color:var(--t);border:1px solid var(--input-border);border-radius:6px;padding:5px 6px;font:inherit}
 .vulns-page .vulns-dt button{width:auto;margin:0;margin-inline-end:6px;margin-block-end:6px;padding:4px 10px;font-size:12px}
 .vulns-page .vulns-dt button.ack{background:var(--surface2);color:var(--t)}
 .vulns-page .vulns-dt button.solve{background:var(--success-bg);color:var(--t)}
@@ -24,5 +24,5 @@
 .vulns-page .vulns-dt button.del{background:var(--danger-bg);color:var(--t)}
 .vulns-page .vulns-dt button:disabled{opacity:.55;cursor:not-allowed}
 .vulns-page .vulns-empty{padding:22px 0;text-align:center;color:var(--m)}
-.vulns-page :focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.vulns-page :focus-visible{outline:2px solid var(--focus-color);outline-offset:2px}
 @media(max-width:1100px){.vulns-page .vulns-form{grid-template-columns:1fr}.vulns-page .vulns-bar select{width:100%}.vulns-page .vulns-bar label{flex:1 1 160px}}

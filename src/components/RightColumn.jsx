@@ -53,7 +53,7 @@ export default function RightColumn({ alerts, threats, onAddAlert, onAddThreat }
             <div>
               <b>{a.title}</b>
               <small>{a.detail}</small>
-              {stateOf(a) === 'ack' && <small style={{ display: 'block', color: 'var(--o)' }}>{t('right.acknowledged')}</small>}
+              {stateOf(a) === 'ack' && <small style={{ display: 'block', color: 'var(--warning-ink)' }}>{t('right.acknowledged')}</small>}
             </div>
             <small>{hm(a.created_at, locale)}</small>
           </div>
