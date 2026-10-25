@@ -34,10 +34,12 @@ export default function useRows(table, user) {
     else load()
   }
 
+  // Renvoie null si la mise à jour réussit, sinon le message d’erreur Supabase.
   const update = async (id, patch) => {
     const { error: e } = await supabase.from(table).update(patch).eq('id', id)
-    if (e) setError(e.message)
-    else load()
+    if (e) { setError(e.message); return e.message }
+    load()
+    return null
   }
 
   return { rows, error, add, remove, update }

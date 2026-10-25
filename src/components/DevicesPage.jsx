@@ -30,9 +30,14 @@ export default function DevicesPage({ devices, services = [], onAddClick, onUpda
     const ip = draft.ip.trim()
     if (!name) return setErr('Le nom est obligatoire.')
     if (!validIp(ip)) return setErr('Adresse IPv4 invalide (ex. 192.168.1.10).')
-    await onUpdate(editId, { name, ip: ip || null, type: draft.type, status: draft.status })
-    setEditId(null)
-    setErr('')
+    try {
+      const msg = await onUpdate(editId, { name, ip: ip || null, type: draft.type, status: draft.status })
+      if (msg) { setErr(msg); return }
+      setEditId(null)
+      setErr('')
+    } catch {
+      setErr('Échec de l’enregistrement. Vérifiez votre connexion puis réessayez.')
+    }
   }
   const del = (d) => {
     if (window.confirm(`Supprimer « ${d.name} » ?`)) onRemove(devices.indexOf(d))

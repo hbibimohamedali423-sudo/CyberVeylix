@@ -14,7 +14,7 @@ export function Kpis({ counts }) {
       {KPIS.map((k, i) => (
         <div key={k.label} className={`card kpi ${k.cls}`}>
           <div className="ic" />
-          <div><div>{k.label}</div><b>{counts[i] || '—'}</b><br /><small>{counts[i] ? 'Saisi manuellement' : 'Aucune donnée'}</small></div>
+          <div><div>{k.label}</div><b>{counts[i] || '—'}</b><br /><small>{counts[i] ? 'Données enregistrées' : 'Aucune donnée'}</small></div>
         </div>
       ))}
     </section>
