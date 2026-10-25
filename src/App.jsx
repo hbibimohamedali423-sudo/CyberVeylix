@@ -22,10 +22,15 @@ function Dashboard({ user }) {
   const label = (list, k) => list.find((x) => x.k === k)?.label
   const vulns = vul.rows.map((v) => ({ ...v, sev: v.severity }))
   const error = dev.error || vul.error || alr.error || thr.error || srv.error
+  const connected = !error
+  const lastScan = dev.rows.reduce((latest, d) => {
+    const t = d.last_seen ? new Date(d.last_seen).getTime() : NaN
+    return Number.isFinite(t) && (latest === null || t > latest) ? t : latest
+  }, null)
 
   return (
     <>
-      <Topbar email={user.email} onLogout={() => supabase.auth.signOut()} />
+      <Topbar email={user.email} onLogout={() => supabase.auth.signOut()} connected={connected} lastScan={lastScan} />
       <div className="wrap">
         <Sidebar active={page} onChange={setPage} />
         {page === 0 ? (<>
