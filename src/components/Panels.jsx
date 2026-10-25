@@ -52,7 +52,7 @@ export function NetworkMap({ devices, onAdd }) {
           return (
             <g key={i}>
               <title>{d.name} — {d.ip || '—'}</title>
-              <circle cx={x} cy={y} r="9" fill={TYPES[d.type]} stroke={st?.color} strokeWidth="2" />
+              <circle cx={x} cy={y} r="9" style={{ fill: TYPES[d.type], stroke: st?.color }} strokeWidth="2" />
               <text x={x} y={y + 22} textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="9">{d.name}</text>
             </g>
           )

@@ -11,7 +11,7 @@ export default function Donut({ items }) {
       <circle cx="21" cy="21" r="15.9" fill="none" style={{ stroke: 'var(--track)' }} strokeWidth="5" />
       <g fill="none" strokeWidth="5" transform="rotate(-90 21 21)">
         {arcs.map((a) => (a.n ? (
-          <circle key={a.label} cx="21" cy="21" r="15.9" stroke={a.color} strokeDasharray={`${a.pc} ${100 - a.pc}`} strokeDashoffset={-a.offset} />
+          <circle key={a.label} cx="21" cy="21" r="15.9" style={{ stroke: a.color }} strokeDasharray={`${a.pc} ${100 - a.pc}`} strokeDashoffset={-a.offset} />
         ) : null))}
       </g>
       <text x="21" y="22" textAnchor="middle" style={{ fill: 'var(--t)' }} fontSize="9" fontWeight="600">{total}</text>

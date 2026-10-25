@@ -6,22 +6,23 @@ export const KPIS = [
   { key: 'vulns', cls: 'r' },
   { key: 'services', cls: '' },
 ]
-export const TYPES = { 'Serveur': '#e0a040', 'Poste': '#17a6f5', 'Caméra': '#e0a040', 'Équipement réseau': '#17c8f5', 'Accès Internet': '#6a8cff' }
+// Couleurs pilotées par le thème (valeurs sombres et claires définies dans index.css).
+export const TYPES = { 'Serveur': 'var(--type-server)', 'Poste': 'var(--type-workstation)', 'Caméra': 'var(--type-camera)', 'Équipement réseau': 'var(--type-network)', 'Accès Internet': 'var(--type-internet)' }
 export const STATUS = [
-  { k: 'on', label: 'En ligne', color: '#1ed98a' },
-  { k: 'off', label: 'Hors ligne', color: '#ff3b4e' },
-  { k: 'un', label: 'Inconnu', color: '#8fa6c0' },
+  { k: 'on', label: 'En ligne', color: 'var(--status-on)' },
+  { k: 'off', label: 'Hors ligne', color: 'var(--status-off)' },
+  { k: 'un', label: 'Inconnu', color: 'var(--status-un)' },
 ]
 export const SEV = [
-  { k: 'c', label: 'Critique', color: '#ff3b4e' },
-  { k: 'h', label: 'Haute', color: '#ff9a2e' },
-  { k: 'm', label: 'Moyenne', color: '#f5c542' },
-  { k: 'l', label: 'Basse', color: '#8fa6c0' },
+  { k: 'c', label: 'Critique', color: 'var(--sev-c)' },
+  { k: 'h', label: 'Haute', color: 'var(--sev-h)' },
+  { k: 'm', label: 'Moyenne', color: 'var(--sev-m)' },
+  { k: 'l', label: 'Basse', color: 'var(--sev-l)' },
 ]
 export const ALERT_STATUS = [
-  { k: 'open', label: 'Ouverte', color: '#ff9a2e' },
-  { k: 'ack', label: 'Prise en compte', color: '#17a6f5' },
-  { k: 'resolved', label: 'Résolue', color: '#1ed98a' },
+  { k: 'open', label: 'Ouverte', color: 'var(--alert-open)' },
+  { k: 'ack', label: 'Prise en compte', color: 'var(--alert-ack)' },
+  { k: 'resolved', label: 'Résolue', color: 'var(--alert-resolved)' },
 ]
 export const REPORTS_KINDS = [
   { k: 'devices', label: 'Appareils' },
@@ -31,9 +32,9 @@ export const REPORTS_KINDS = [
 ]
 export const SLOTS = [[300,150],[380,190],[230,200],[340,240],[420,130],[190,250],[300,290],[450,200],[260,130],[390,260],[340,100],[480,250]]
 export const CATS = [
-  { k: 'intrusion', label: 'Tentatives d’intrusion', color: '#ff3b4e' },
-  { k: 'malware', label: 'Malware / Ransomware', color: '#ff9a2e' },
-  { k: 'scan', label: 'Scan de ports', color: '#2a8fe0' },
-  { k: 'c2', label: 'C2 / Command & Control', color: '#9b5cff' },
-  { k: 'autre', label: 'Autres', color: '#6a8cff' },
+  { k: 'intrusion', label: 'Tentatives d’intrusion', color: 'var(--cat-intrusion)' },
+  { k: 'malware', label: 'Malware / Ransomware', color: 'var(--cat-malware)' },
+  { k: 'scan', label: 'Scan de ports', color: 'var(--cat-scan)' },
+  { k: 'c2', label: 'C2 / Command & Control', color: 'var(--cat-c2)' },
+  { k: 'autre', label: 'Autres', color: 'var(--cat-other)' },
 ]
