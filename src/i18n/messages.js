@@ -35,7 +35,7 @@ export const MESSAGES = {
       toggleTheme: 'Basculer entre le mode sombre et le mode clair',
     },
     banner: {
-      title: 'Tableau de bord', subtitle: 'Vue d’ensemble de votre infrastructure et de votre sécurité',
+      brand: 'Topologie', title: 'Tableau de bord', subtitle: 'Vue d’ensemble de votre infrastructure et de votre sécurité',
       slogan1: 'Plus qu’un outil…', slogan2: 'une intelligence réseau.',
     },
     kpi: {
@@ -138,7 +138,7 @@ export const MESSAGES = {
       toggleTheme: 'Toggle between dark and light mode',
     },
     banner: {
-      title: 'Dashboard', subtitle: 'Overview of your infrastructure and security',
+      brand: 'Topology', title: 'Dashboard', subtitle: 'Overview of your infrastructure and security',
       slogan1: 'More than a tool…', slogan2: 'network intelligence.',
     },
     kpi: {
@@ -240,7 +240,7 @@ export const MESSAGES = {
       toggleTheme: 'Zwischen Dunkel- und Hellmodus wechseln',
     },
     banner: {
-      title: 'Dashboard', subtitle: 'Überblick über Ihre Infrastruktur und Sicherheit',
+      brand: 'Topologie', title: 'Dashboard', subtitle: 'Überblick über Ihre Infrastruktur und Sicherheit',
       slogan1: 'Mehr als ein Werkzeug…', slogan2: 'eine Netzwerkintelligenz.',
     },
     kpi: {
@@ -342,7 +342,7 @@ export const MESSAGES = {
       toggleTheme: 'التبديل بين الوضع الداكن والوضع الفاتح',
     },
     banner: {
-      title: 'لوحة التحكم', subtitle: 'نظرة عامة على بنيتك التحتية وأمنك',
+      brand: 'طوبولوجيا', title: 'لوحة التحكم', subtitle: 'نظرة عامة على بنيتك التحتية وأمنك',
       slogan1: 'أكثر من مجرد أداة…', slogan2: 'ذكاء شبكي.',
     },
     kpi: {
@@ -444,7 +444,7 @@ export const MESSAGES = {
       toggleTheme: 'Passa tra modalità scura e chiara',
     },
     banner: {
-      title: 'Dashboard', subtitle: 'Panoramica della tua infrastruttura e della tua sicurezza',
+      brand: 'Topologia', title: 'Dashboard', subtitle: 'Panoramica della tua infrastruttura e della tua sicurezza',
       slogan1: 'Più di uno strumento…', slogan2: 'un’intelligenza di rete.',
     },
     kpi: {

@@ -6,7 +6,7 @@ export function Banner() {
   const { t } = useI18n()
   return (
     <section className="banner">
-      <div><small>CYBERVEYLIX</small><h1>{t('banner.title')}</h1><div style={{ fontSize: 15 }}>{t('banner.subtitle')}</div></div>
+      <div><small>{t('banner.brand')}</small><h1>{t('banner.title')}</h1><div style={{ fontSize: 15 }}>{t('banner.subtitle')}</div></div>
       <div className="slogan">{t('banner.slogan1')}<br />{t('banner.slogan2')}</div>
     </section>
   )
