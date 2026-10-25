@@ -1,9 +1,10 @@
-export const NAV = ['Accueil', 'Réseau & Appareils', 'Analyse & Scan', 'Vulnérabilités', 'Menaces & Incidents', 'Surveillance (SOC)', 'Rapports', 'Cartographie', 'Équipe', 'Paramètres']
+// Codes de navigation : les libellés sont traduits à l’affichage (i18n).
+export const NAV = ['home', 'devices', 'scan', 'vulns', 'threats', 'soc', 'reports', 'map', 'team', 'settings']
 export const KPIS = [
-  { label: 'Appareils détectés', cls: '' },
-  { label: 'Menaces bloquées', cls: 'r' },
-  { label: 'Vulnérabilités', cls: 'r' },
-  { label: 'Services exposés', cls: '' },
+  { key: 'devices', cls: '' },
+  { key: 'threats', cls: 'r' },
+  { key: 'vulns', cls: 'r' },
+  { key: 'services', cls: '' },
 ]
 export const TYPES = { 'Serveur': '#e0a040', 'Poste': '#17a6f5', 'Caméra': '#e0a040', 'Équipement réseau': '#17c8f5', 'Accès Internet': '#6a8cff' }
 export const STATUS = [

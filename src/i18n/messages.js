@@ -1,0 +1,533 @@
+// Catalogue de traductions et logique pure (testable sans React).
+export const DEFAULT_LANG = 'fr'
+export const STORAGE_KEY = 'cyberveylix.lang'
+
+export const LANGS = [
+  { code: 'fr', label: 'Français', dir: 'ltr', locale: 'fr-FR' },
+  { code: 'en', label: 'English', dir: 'ltr', locale: 'en-GB' },
+  { code: 'de', label: 'Deutsch', dir: 'ltr', locale: 'de-DE' },
+  { code: 'ar', label: 'العربية', dir: 'rtl', locale: 'ar-EG' },
+  { code: 'it', label: 'Italiano', dir: 'ltr', locale: 'it-IT' },
+]
+
+export const MESSAGES = {
+  fr: {
+    common: {
+      add: 'Ajouter', save: 'Enregistrer', cancel: 'Annuler', edit: 'Modifier', delete: 'Supprimer',
+      close: 'Fermer', all: 'Tous', none: 'Aucun', loading: 'Chargement…', yes: 'Oui', no: 'Non',
+      updateError: "Échec de l’opération. Vérifiez votre connexion puis réessayez.", dash: '—',
+      sectionSoon: 'Cette section est en cours de développement.',
+    },
+    nav: {
+      home: 'Accueil', devices: 'Réseau & Appareils', scan: 'Analyse & Scan', vulns: 'Vulnérabilités',
+      threats: 'Menaces & Incidents', soc: 'Surveillance (SOC)', reports: 'Rapports',
+      map: 'Cartographie', team: 'Équipe', settings: 'Paramètres',
+    },
+    topbar: {
+      search: 'Rechercher un appareil, une IP, un domaine…', shortcut: 'Ctrl + K',
+      connected: 'Base de données connectée', syncError: 'Erreur de synchronisation',
+      lastScan: 'Dernier scan : {{date}}', logout: 'Déconnexion',
+    },
+    sidebar: {
+      promoTitle: 'Une vision complète de votre sécurité réseau', promoSub: 'Détecter • Analyser • Protéger',
+      darkMode: 'Mode Sombre', language: 'Langue',
+    },
+    banner: {
+      title: 'Tableau de bord', subtitle: 'Vue d’ensemble de votre infrastructure et de votre sécurité',
+      slogan1: 'Plus qu’un outil…', slogan2: 'une intelligence réseau.',
+    },
+    kpi: {
+      devices: 'Appareils détectés', threats: 'Menaces bloquées', vulns: 'Vulnérabilités',
+      services: 'Services exposés', pending: 'En attente', stored: 'Données enregistrées', noData: 'Aucune donnée',
+    },
+    map: {
+      title: 'Carte réseau en temps réel', offline: 'Hors ligne', threat: 'Menace détectée',
+      noDevices: 'Aucun appareil détecté', addDevice: 'Ajouter un appareil', site: 'Site principal',
+    },
+    activity: {
+      title: 'Activité réseau', waiting: 'En attente de données', bandwidth: 'Bande passante actuelle',
+      packets: 'Paquets analysés', inbound: 'Entrant', outbound: 'Sortant',
+    },
+    cards: {
+      devicesTitle: 'État des appareils', vulnTitle: 'Vulnérabilités par sévérité', vulnUnresolved: 'non résolues',
+      addVuln: 'Ajouter une vulnérabilité', threatsTitle: 'Évolution des menaces', threatsRange: '7 jours',
+      noData: 'Aucune donnée',
+    },
+    right: {
+      alertsTitle: 'Alertes & Notifications', noAlerts: 'Aucune alerte', noOpenAlerts: 'Aucune alerte ouverte',
+      acknowledged: 'Prise en compte', threatsTitle: 'Top menaces récentes', noThreats: 'Aucune menace enregistrée',
+      reportsTitle: 'Derniers rapports', noReports: 'Aucun rapport',
+    },
+    devicesPage: {
+      title: 'Réseau & Appareils', count: '{{shown}} / {{total}} appareil(s)',
+      search: 'Rechercher par nom, IP ou type…', allStatuses: 'Tous les statuts', add: '+ Ajouter',
+      colName: 'Nom', colIp: 'Adresse IP', colType: 'Type', colStatus: 'Statut', colPorts: 'Ports ouverts',
+      colSeen: 'Dernier vu', colActions: 'Actions', save: 'Enregistrer', cancel: 'Annuler',
+      edit: 'Modifier', delete: 'Supprimer', errName: 'Le nom est obligatoire.',
+      errIp: 'Adresse IPv4 invalide (ex. 192.168.1.10).', confirmDelete: 'Supprimer « {{name}} » ?',
+      empty: 'Aucun appareil. Utilisez « + Ajouter » pour en saisir un.', noResult: 'Aucun résultat.',
+      ipPlaceholder: '192.168.1.10',
+    },
+    alertsPage: {
+      title: 'Menaces & Incidents', section: 'Alertes',
+      sevFilter: 'Gravité', allSev: 'Toutes les gravités', statusFilter: 'Statut', allStatuses: 'Tous les statuts',
+      colTitle: 'Titre', colSev: 'Gravité', colStatus: 'Statut', colDetail: 'Détail', colCreated: 'Créée le',
+      colAck: 'Prise en compte', colResolved: 'Résolue', colActions: 'Actions',
+      ack: 'Prendre en compte', resolve: 'Résoudre', confirmResolve: 'Résoudre l’alerte « {{title}} » ?',
+      errUpdate: "Échec de la mise à jour. Vérifiez votre connexion puis réessayez.",
+      empty: 'Aucune alerte', noResult: 'Aucun résultat',
+      ariaAck: 'Prendre en compte « {{title}} »', ariaResolve: 'Résoudre « {{title}} »',
+    },
+    vulnsPage: {
+      title: 'Vulnérabilités', formTitle: 'Titre', formTitlePh: 'Titre ou CVE (ex. CVE-2024-6387)',
+      severity: 'Gravité', device: 'Appareil (facultatif)', deviceNone: 'Aucun', deviceDeleted: 'Appareil supprimé',
+      note: 'Note (facultatif)', add: 'Ajouter', colDevice: 'Appareil', colNote: 'Note',
+      errTitle: 'Le titre est obligatoire.', confirmResolve: 'Résoudre la vulnérabilité « {{title}} » ?',
+      confirmDelete: 'Supprimer la vulnérabilité « {{title}} » ?',
+      empty: 'Aucune vulnérabilité', noResult: 'Aucun résultat',
+      ariaTitle: 'Titre de « {{title}} »', ariaSeverity: 'Gravité de « {{title}} »',
+      ariaDevice: 'Appareil lié à « {{title}} »', ariaNote: 'Note de « {{title}} »',
+      ariaSave: 'Enregistrer « {{title}} »', ariaCancel: 'Annuler la modification de « {{title}} »',
+      ariaEdit: 'Modifier « {{title}} »', ariaDelete: 'Supprimer « {{title}} »',
+    },
+    modal: {
+      devices: 'Appareils', alerts: 'Alertes', threats: 'Menaces', add: 'Ajouter', close: 'Fermer',
+      name: 'Nom de l’appareil', ip: 'Adresse IP (ex. 192.168.1.10)', type: 'Type', status: 'Statut',
+      title: 'Titre', detail: 'Détail (facultatif)', severity: 'Gravité', category: 'Catégorie',
+      blocked: 'Blocage', blockedYes: 'Bloquée', blockedNo: 'Non bloquée',
+      alertTitle: 'Titre de l’alerte', vulnTitle: 'Titre ou CVE (ex. CVE-2024-6387)',
+    },
+    login: {
+      email: 'E-mail', password: 'Mot de passe (8 caractères min.)', signIn: 'Se connecter',
+      signUp: 'Créer un compte',
+      confirmEmail: 'Compte créé. Vérifiez votre e-mail pour confirmer, puis connectez-vous.',
+    },
+    setup: {
+      title: 'Configuration requise',
+      text: 'Créez un fichier .env à la racine du projet (voir .env.example) avec VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY, puis relancez npm run dev.',
+    },
+    status: { on: 'En ligne', off: 'Hors ligne', un: 'Inconnu' },
+    sev: { c: 'Critique', h: 'Haute', m: 'Moyenne', l: 'Basse' },
+    cats: { intrusion: 'Tentatives d’intrusion', malware: 'Malware / Ransomware', scan: 'Scan de ports', c2: 'C2 / Command & Control', autre: 'Autres' },
+    alertStatus: { open: 'Ouverte', ack: 'Prise en compte', resolved: 'Résolue' },
+    type: { 'Serveur': 'Serveur', 'Poste': 'Poste', 'Caméra': 'Caméra', 'Équipement réseau': 'Équipement réseau', 'Accès Internet': 'Accès Internet' },
+  },
+  en: {
+    common: {
+      add: 'Add', save: 'Save', cancel: 'Cancel', edit: 'Edit', delete: 'Delete', close: 'Close',
+      all: 'All', none: 'None', loading: 'Loading…', yes: 'Yes', no: 'No',
+      updateError: 'Operation failed. Check your connection and try again.', dash: '—',
+      sectionSoon: 'This section is under development.',
+    },
+    nav: {
+      home: 'Home', devices: 'Network & Devices', scan: 'Analysis & Scan', vulns: 'Vulnerabilities',
+      threats: 'Threats & Incidents', soc: 'Surveillance (SOC)', reports: 'Reports',
+      map: 'Mapping', team: 'Team', settings: 'Settings',
+    },
+    topbar: {
+      search: 'Search for a device, an IP, a domain…', shortcut: 'Ctrl + K',
+      connected: 'Database connected', syncError: 'Synchronization error',
+      lastScan: 'Last scan: {{date}}', logout: 'Sign out',
+    },
+    sidebar: {
+      promoTitle: 'A complete view of your network security', promoSub: 'Detect • Analyse • Protect',
+      darkMode: 'Dark mode', language: 'Language',
+    },
+    banner: {
+      title: 'Dashboard', subtitle: 'Overview of your infrastructure and security',
+      slogan1: 'More than a tool…', slogan2: 'network intelligence.',
+    },
+    kpi: {
+      devices: 'Devices detected', threats: 'Threats blocked', vulns: 'Vulnerabilities',
+      services: 'Exposed services', pending: 'Pending', stored: 'Stored data', noData: 'No data',
+    },
+    map: {
+      title: 'Real-time network map', offline: 'Offline', threat: 'Threat detected',
+      noDevices: 'No device detected', addDevice: 'Add a device', site: 'Main site',
+    },
+    activity: {
+      title: 'Network activity', waiting: 'Waiting for data', bandwidth: 'Current bandwidth',
+      packets: 'Packets analysed', inbound: 'Inbound', outbound: 'Outbound',
+    },
+    cards: {
+      devicesTitle: 'Device status', vulnTitle: 'Vulnerabilities by severity', vulnUnresolved: 'unresolved',
+      addVuln: 'Add a vulnerability', threatsTitle: 'Threat trend', threatsRange: '7 days', noData: 'No data',
+    },
+    right: {
+      alertsTitle: 'Alerts & Notifications', noAlerts: 'No alerts', noOpenAlerts: 'No open alerts',
+      acknowledged: 'Acknowledged', threatsTitle: 'Top recent threats', noThreats: 'No threats recorded',
+      reportsTitle: 'Latest reports', noReports: 'No reports',
+    },
+    devicesPage: {
+      title: 'Network & Devices', count: '{{shown}} / {{total}} device(s)',
+      search: 'Search by name, IP or type…', allStatuses: 'All statuses', add: '+ Add',
+      colName: 'Name', colIp: 'IP address', colType: 'Type', colStatus: 'Status', colPorts: 'Open ports',
+      colSeen: 'Last seen', colActions: 'Actions', save: 'Save', cancel: 'Cancel',
+      edit: 'Edit', delete: 'Delete', errName: 'Name is required.',
+      errIp: 'Invalid IPv4 address (e.g. 192.168.1.10).', confirmDelete: 'Delete “{{name}}”?',
+      empty: 'No devices. Use “+ Add” to create one.', noResult: 'No results.',
+      ipPlaceholder: '192.168.1.10',
+    },
+    alertsPage: {
+      title: 'Threats & Incidents', section: 'Alerts',
+      sevFilter: 'Severity', allSev: 'All severities', statusFilter: 'Status', allStatuses: 'All statuses',
+      colTitle: 'Title', colSev: 'Severity', colStatus: 'Status', colDetail: 'Detail', colCreated: 'Created',
+      colAck: 'Acknowledged', colResolved: 'Resolved', colActions: 'Actions',
+      ack: 'Acknowledge', resolve: 'Resolve', confirmResolve: 'Resolve alert “{{title}}”?',
+      errUpdate: 'Update failed. Check your connection and try again.',
+      empty: 'No alerts', noResult: 'No results',
+      ariaAck: 'Acknowledge “{{title}}”', ariaResolve: 'Resolve “{{title}}”',
+    },
+    vulnsPage: {
+      title: 'Vulnerabilities', formTitle: 'Title', formTitlePh: 'Title or CVE (e.g. CVE-2024-6387)',
+      severity: 'Severity', device: 'Device (optional)', deviceNone: 'None', deviceDeleted: 'Deleted device',
+      note: 'Note (optional)', add: 'Add', colDevice: 'Device', colNote: 'Note',
+      errTitle: 'Title is required.', confirmResolve: 'Resolve vulnerability “{{title}}”?',
+      confirmDelete: 'Delete vulnerability “{{title}}”?',
+      empty: 'No vulnerabilities', noResult: 'No results',
+      ariaTitle: 'Title of “{{title}}”', ariaSeverity: 'Severity of “{{title}}”',
+      ariaDevice: 'Device linked to “{{title}}”', ariaNote: 'Note of “{{title}}”',
+      ariaSave: 'Save “{{title}}”', ariaCancel: 'Cancel editing “{{title}}”',
+      ariaEdit: 'Edit “{{title}}”', ariaDelete: 'Delete “{{title}}”',
+    },
+    modal: {
+      devices: 'Devices', alerts: 'Alerts', threats: 'Threats', add: 'Add', close: 'Close',
+      name: 'Device name', ip: 'IP address (e.g. 192.168.1.10)', type: 'Type', status: 'Status',
+      title: 'Title', detail: 'Detail (optional)', severity: 'Severity', category: 'Category',
+      blocked: 'Blocking', blockedYes: 'Blocked', blockedNo: 'Not blocked',
+      alertTitle: 'Alert title', vulnTitle: 'Title or CVE (e.g. CVE-2024-6387)',
+    },
+    login: {
+      email: 'Email', password: 'Password (min. 8 characters)', signIn: 'Sign in',
+      signUp: 'Create an account',
+      confirmEmail: 'Account created. Confirm your email, then sign in.',
+    },
+    setup: {
+      title: 'Configuration required',
+      text: 'Create a .env file at the project root (see .env.example) with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then run npm run dev again.',
+    },
+    status: { on: 'Online', off: 'Offline', un: 'Unknown' },
+    sev: { c: 'Critical', h: 'High', m: 'Medium', l: 'Low' },
+    cats: { intrusion: 'Intrusion attempts', malware: 'Malware / Ransomware', scan: 'Port scan', c2: 'C2 / Command & Control', autre: 'Other' },
+    alertStatus: { open: 'Open', ack: 'Acknowledged', resolved: 'Resolved' },
+    type: { 'Serveur': 'Server', 'Poste': 'Workstation', 'Caméra': 'Camera', 'Équipement réseau': 'Network device', 'Accès Internet': 'Internet access' },
+  },
+  de: {
+    common: {
+      add: 'Hinzufügen', save: 'Speichern', cancel: 'Abbrechen', edit: 'Bearbeiten', delete: 'Löschen',
+      close: 'Schließen', all: 'Alle', none: 'Keine', loading: 'Wird geladen…', yes: 'Ja', no: 'Nein',
+      updateError: 'Vorgang fehlgeschlagen. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.', dash: '—',
+      sectionSoon: 'Dieser Bereich wird noch entwickelt.',
+    },
+    nav: {
+      home: 'Startseite', devices: 'Netzwerk & Geräte', scan: 'Analyse & Scan', vulns: 'Schwachstellen',
+      threats: 'Bedrohungen & Vorfälle', soc: 'Überwachung (SOC)', reports: 'Berichte',
+      map: 'Kartografie', team: 'Team', settings: 'Einstellungen',
+    },
+    topbar: {
+      search: 'Gerät, IP oder Domain suchen…', shortcut: 'Ctrl + K',
+      connected: 'Datenbank verbunden', syncError: 'Synchronisierungsfehler',
+      lastScan: 'Letzter Scan: {{date}}', logout: 'Abmelden',
+    },
+    sidebar: {
+      promoTitle: 'Ein vollständiger Überblick über Ihre Netzwerksicherheit', promoSub: 'Erkennen • Analysieren • Schützen',
+      darkMode: 'Dunkelmodus', language: 'Sprache',
+    },
+    banner: {
+      title: 'Dashboard', subtitle: 'Überblick über Ihre Infrastruktur und Sicherheit',
+      slogan1: 'Mehr als ein Werkzeug…', slogan2: 'eine Netzwerkintelligenz.',
+    },
+    kpi: {
+      devices: 'Erkannte Geräte', threats: 'Blockierte Bedrohungen', vulns: 'Schwachstellen',
+      services: 'Exponierte Dienste', pending: 'Ausstehend', stored: 'Gespeicherte Daten', noData: 'Keine Daten',
+    },
+    map: {
+      title: 'Netzwerkkarte in Echtzeit', offline: 'Offline', threat: 'Bedrohung erkannt',
+      noDevices: 'Kein Gerät erkannt', addDevice: 'Gerät hinzufügen', site: 'Hauptstandort',
+    },
+    activity: {
+      title: 'Netzwerkaktivität', waiting: 'Warte auf Daten', bandwidth: 'Aktuelle Bandbreite',
+      packets: 'Analysierte Pakete', inbound: 'Eingehend', outbound: 'Ausgehend',
+    },
+    cards: {
+      devicesTitle: 'Gerätestatus', vulnTitle: 'Schwachstellen nach Schweregrad', vulnUnresolved: 'nicht behoben',
+      addVuln: 'Schwachstelle hinzufügen', threatsTitle: 'Bedrohungsverlauf', threatsRange: '7 Tage', noData: 'Keine Daten',
+    },
+    right: {
+      alertsTitle: 'Alarme & Benachrichtigungen', noAlerts: 'Keine Alarme', noOpenAlerts: 'Keine offenen Alarme',
+      acknowledged: 'Zur Kenntnis genommen', threatsTitle: 'Top-Bedrohungen', noThreats: 'Keine Bedrohungen gespeichert',
+      reportsTitle: 'Letzte Berichte', noReports: 'Keine Berichte',
+    },
+    devicesPage: {
+      title: 'Netzwerk & Geräte', count: '{{shown}} / {{total}} Gerät(e)',
+      search: 'Nach Name, IP oder Typ suchen…', allStatuses: 'Alle Status', add: '+ Hinzufügen',
+      colName: 'Name', colIp: 'IP-Adresse', colType: 'Typ', colStatus: 'Status', colPorts: 'Offene Ports',
+      colSeen: 'Zuletzt gesehen', colActions: 'Aktionen', save: 'Speichern', cancel: 'Abbrechen',
+      edit: 'Bearbeiten', delete: 'Löschen', errName: 'Name ist erforderlich.',
+      errIp: 'Ungültige IPv4-Adresse (z. B. 192.168.1.10).', confirmDelete: 'Gerät „{{name}}“ löschen?',
+      empty: 'Keine Geräte. Verwenden Sie „+ Hinzufügen“.', noResult: 'Keine Ergebnisse.',
+      ipPlaceholder: '192.168.1.10',
+    },
+    alertsPage: {
+      title: 'Bedrohungen & Vorfälle', section: 'Alarme',
+      sevFilter: 'Schweregrad', allSev: 'Alle Schweregrade', statusFilter: 'Status', allStatuses: 'Alle Status',
+      colTitle: 'Titel', colSev: 'Schweregrad', colStatus: 'Status', colDetail: 'Detail', colCreated: 'Erstellt am',
+      colAck: 'Zur Kenntnis genommen', colResolved: 'Behoben', colActions: 'Aktionen',
+      ack: 'Zur Kenntnis nehmen', resolve: 'Beheben', confirmResolve: 'Alarm „{{title}}“ beheben?',
+      errUpdate: 'Aktualisierung fehlgeschlagen. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.',
+      empty: 'Keine Alarme', noResult: 'Keine Ergebnisse',
+      ariaAck: 'Alarm „{{title}}“ zur Kenntnis nehmen', ariaResolve: 'Alarm „{{title}}“ beheben',
+    },
+    vulnsPage: {
+      title: 'Schwachstellen', formTitle: 'Titel', formTitlePh: 'Titel oder CVE (z. B. CVE-2024-6387)',
+      severity: 'Schweregrad', device: 'Gerät (optional)', deviceNone: 'Keine', deviceDeleted: 'Gelöschtes Gerät',
+      note: 'Notiz (optional)', add: 'Hinzufügen', colDevice: 'Gerät', colNote: 'Notiz',
+      errTitle: 'Titel ist erforderlich.', confirmResolve: 'Schwachstelle „{{title}}“ beheben?',
+      confirmDelete: 'Schwachstelle „{{title}}“ löschen?',
+      empty: 'Keine Schwachstellen', noResult: 'Keine Ergebnisse',
+      ariaTitle: 'Titel von „{{title}}“', ariaSeverity: 'Schweregrad von „{{title}}“',
+      ariaDevice: 'Gerät verknüpft mit „{{title}}“', ariaNote: 'Notiz zu „{{title}}“',
+      ariaSave: '„{{title}}“ speichern', ariaCancel: 'Bearbeitung von „{{title}}“ abbrechen',
+      ariaEdit: '„{{title}}“ bearbeiten', ariaDelete: '„{{title}}“ löschen',
+    },
+    modal: {
+      devices: 'Geräte', alerts: 'Alarme', threats: 'Bedrohungen', add: 'Hinzufügen', close: 'Schließen',
+      name: 'Gerätename', ip: 'IP-Adresse (z. B. 192.168.1.10)', type: 'Typ', status: 'Status',
+      title: 'Titel', detail: 'Detail (optional)', severity: 'Schweregrad', category: 'Kategorie',
+      blocked: 'Blockierung', blockedYes: 'Blockiert', blockedNo: 'Nicht blockiert',
+      alertTitle: 'Alarmtitel', vulnTitle: 'Titel oder CVE (z. B. CVE-2024-6387)',
+    },
+    login: {
+      email: 'E-Mail', password: 'Passwort (mind. 8 Zeichen)', signIn: 'Anmelden',
+      signUp: 'Konto erstellen',
+      confirmEmail: 'Konto erstellt. Bestätigen Sie Ihre E-Mail und melden Sie sich dann an.',
+    },
+    setup: {
+      title: 'Konfiguration erforderlich',
+      text: 'Erstellen Sie eine .env-Datei im Projektstamm (siehe .env.example) mit VITE_SUPABASE_URL und VITE_SUPABASE_ANON_KEY und starten Sie npm run dev erneut.',
+    },
+    status: { on: 'Online', off: 'Offline', un: 'Unbekannt' },
+    sev: { c: 'Kritisch', h: 'Hoch', m: 'Mittel', l: 'Niedrig' },
+    cats: { intrusion: 'Eindringversuche', malware: 'Malware / Ransomware', scan: 'Port-Scan', c2: 'C2 / Command & Control', autre: 'Sonstige' },
+    alertStatus: { open: 'Offen', ack: 'Zur Kenntnis genommen', resolved: 'Behoben' },
+    type: { 'Serveur': 'Server', 'Poste': 'Arbeitsstation', 'Caméra': 'Kamera', 'Équipement réseau': 'Netzwerkgerät', 'Accès Internet': 'Internetzugang' },
+  },
+  ar: {
+    common: {
+      add: 'إضافة', save: 'حفظ', cancel: 'إلغاء', edit: 'تعديل', delete: 'حذف', close: 'إغلاق',
+      all: 'الكل', none: 'لا شيء', loading: 'جارٍ التحميل…', yes: 'نعم', no: 'لا',
+      updateError: 'فشلت العملية. تحقق من اتصالك ثم أعد المحاولة.', dash: '—',
+      sectionSoon: 'هذا القسم قيد التطوير.',
+    },
+    nav: {
+      home: 'الرئيسية', devices: 'الشبكة والأجهزة', scan: 'التحليل والفحص', vulns: 'الثغرات',
+      threats: 'التهديدات والحوادث', soc: 'المراقبة (SOC)', reports: 'التقارير',
+      map: 'رسم الخرائط', team: 'الفريق', settings: 'الإعدادات',
+    },
+    topbar: {
+      search: 'ابحث عن جهاز أو عنوان IP أو نطاق…', shortcut: 'Ctrl + K',
+      connected: 'قاعدة البيانات متصلة', syncError: 'خطأ في المزامنة',
+      lastScan: 'آخر فحص: {{date}}', logout: 'تسجيل الخروج',
+    },
+    sidebar: {
+      promoTitle: 'رؤية كاملة لأمن شبكتك', promoSub: 'اكتشاف • تحليل • حماية',
+      darkMode: 'الوضع الداكن', language: 'اللغة',
+    },
+    banner: {
+      title: 'لوحة التحكم', subtitle: 'نظرة عامة على بنيتك التحتية وأمنك',
+      slogan1: 'أكثر من مجرد أداة…', slogan2: 'ذكاء شبكي.',
+    },
+    kpi: {
+      devices: 'الأجهزة المكتشفة', threats: 'التهديدات المحظورة', vulns: 'الثغرات',
+      services: 'الخدمات المكشوفة', pending: 'في الانتظار', stored: 'بيانات مسجلة', noData: 'لا توجد بيانات',
+    },
+    map: {
+      title: 'خريطة الشبكة في الوقت الفعلي', offline: 'غير متصل', threat: 'تهديد مكتشف',
+      noDevices: 'لم يتم اكتشاف أي جهاز', addDevice: 'إضافة جهاز', site: 'الموقع الرئيسي',
+    },
+    activity: {
+      title: 'نشاط الشبكة', waiting: 'في انتظار البيانات', bandwidth: 'النطاق الترددي الحالي',
+      packets: 'الحزم المحللة', inbound: 'وارد', outbound: 'صادر',
+    },
+    cards: {
+      devicesTitle: 'حالة الأجهزة', vulnTitle: 'الثغرات حسب الخطورة', vulnUnresolved: 'غير محلولة',
+      addVuln: 'إضافة ثغرة', threatsTitle: 'تطور التهديدات', threatsRange: '7 أيام', noData: 'لا توجد بيانات',
+    },
+    right: {
+      alertsTitle: 'التنبيهات والإشعارات', noAlerts: 'لا توجد تنبيهات', noOpenAlerts: 'لا توجد تنبيهات مفتوحة',
+      acknowledged: 'تم الاطلاع', threatsTitle: 'أهم التهديدات الأخيرة', noThreats: 'لا توجد تهديدات مسجلة',
+      reportsTitle: 'آخر التقارير', noReports: 'لا توجد تقارير',
+    },
+    devicesPage: {
+      title: 'الشبكة والأجهزة', count: '{{shown}} / {{total}} جهاز',
+      search: 'ابحث بالاسم أو IP أو النوع…', allStatuses: 'جميع الحالات', add: '+ إضافة',
+      colName: 'الاسم', colIp: 'عنوان IP', colType: 'النوع', colStatus: 'الحالة', colPorts: 'المنافذ المفتوحة',
+      colSeen: 'آخر ظهور', colActions: 'الإجراءات', save: 'حفظ', cancel: 'إلغاء',
+      edit: 'تعديل', delete: 'حذف', errName: 'الاسم مطلوب.',
+      errIp: 'عنوان IPv4 غير صالح (مثال 192.168.1.10).', confirmDelete: 'حذف « {{name}} »؟',
+      empty: 'لا توجد أجهزة. استخدم « + إضافة » لإضافة جهاز.', noResult: 'لا توجد نتائج.',
+      ipPlaceholder: '192.168.1.10',
+    },
+    alertsPage: {
+      title: 'التهديدات والحوادث', section: 'التنبيهات',
+      sevFilter: 'الخطورة', allSev: 'جميع مستويات الخطورة', statusFilter: 'الحالة', allStatuses: 'جميع الحالات',
+      colTitle: 'العنوان', colSev: 'الخطورة', colStatus: 'الحالة', colDetail: 'التفاصيل', colCreated: 'تاريخ الإنشاء',
+      colAck: 'تم الاطلاع', colResolved: 'تم الحل', colActions: 'الإجراءات',
+      ack: 'تأكيد الاستلام', resolve: 'حل', confirmResolve: 'هل تريد حل التنبيه « {{title}} »؟',
+      errUpdate: 'فشل التحديث. تحقق من اتصالك ثم أعد المحاولة.',
+      empty: 'لا توجد تنبيهات', noResult: 'لا توجد نتائج',
+      ariaAck: 'تأكيد استلام « {{title}} »', ariaResolve: 'حل « {{title}} »',
+    },
+    vulnsPage: {
+      title: 'الثغرات', formTitle: 'العنوان', formTitlePh: 'العنوان أو CVE (مثال CVE-2024-6387)',
+      severity: 'الخطورة', device: 'الجهاز (اختياري)', deviceNone: 'لا شيء', deviceDeleted: 'جهاز محذوف',
+      note: 'ملاحظة (اختياري)', add: 'إضافة', colDevice: 'الجهاز', colNote: 'ملاحظة',
+      errTitle: 'العنوان مطلوب.', confirmResolve: 'هل تريد حل الثغرة « {{title}} »؟',
+      confirmDelete: 'هل تريد حذف الثغرة « {{title}} »؟',
+      empty: 'لا توجد ثغرات', noResult: 'لا توجد نتائج',
+      ariaTitle: 'عنوان « {{title}} »', ariaSeverity: 'خطورة « {{title}} »',
+      ariaDevice: 'الجهاز المرتبط بـ « {{title}} »', ariaNote: 'ملاحظة « {{title}} »',
+      ariaSave: 'حفظ « {{title}} »', ariaCancel: 'إلغاء تعديل « {{title}} »',
+      ariaEdit: 'تعديل « {{title}} »', ariaDelete: 'حذف « {{title}} »',
+    },
+    modal: {
+      devices: 'الأجهزة', alerts: 'التنبيهات', threats: 'التهديدات', add: 'إضافة', close: 'إغلاق',
+      name: 'اسم الجهاز', ip: 'عنوان IP (مثال 192.168.1.10)', type: 'النوع', status: 'الحالة',
+      title: 'العنوان', detail: 'التفاصيل (اختياري)', severity: 'الخطورة', category: 'الفئة',
+      blocked: 'الحجب', blockedYes: 'محظور', blockedNo: 'غير محظور',
+      alertTitle: 'عنوان التنبيه', vulnTitle: 'العنوان أو CVE (مثال CVE-2024-6387)',
+    },
+    login: {
+      email: 'البريد الإلكتروني', password: 'كلمة المرور (8 أحرف على الأقل)', signIn: 'تسجيل الدخول',
+      signUp: 'إنشاء حساب',
+      confirmEmail: 'تم إنشاء الحساب. تحقق من بريدك الإلكتروني للتأكيد ثم سجّل الدخول.',
+    },
+    setup: {
+      title: 'الإعداد مطلوب',
+      text: 'أنشئ ملف .env في جذر المشروع (انظر .env.example) يحتوي على VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY ثم أعد تشغيل npm run dev.',
+    },
+    status: { on: 'متصل', off: 'غير متصل', un: 'غير معروف' },
+    sev: { c: 'حرجة', h: 'عالية', m: 'متوسطة', l: 'منخفضة' },
+    cats: { intrusion: 'محاولات اختراق', malware: 'برمجيات خبيثة / فدية', scan: 'فحص المنافذ', c2: 'C2 / مركز التحكم', autre: 'أخرى' },
+    alertStatus: { open: 'مفتوح', ack: 'تم الاطلاع', resolved: 'محلول' },
+    type: { 'Serveur': 'خادم', 'Poste': 'حاسوب', 'Caméra': 'كاميرا', 'Équipement réseau': 'جهاز شبكة', 'Accès Internet': 'وصول إلى الإنترنت' },
+  },
+  it: {
+    common: {
+      add: 'Aggiungi', save: 'Salva', cancel: 'Annulla', edit: 'Modifica', delete: 'Elimina', close: 'Chiudi',
+      all: 'Tutti', none: 'Nessuno', loading: 'Caricamento…', yes: 'Sì', no: 'No',
+      updateError: 'Operazione non riuscita. Controlla la connessione e riprova.', dash: '—',
+      sectionSoon: 'Questa sezione è in fase di sviluppo.',
+    },
+    nav: {
+      home: 'Home', devices: 'Rete e dispositivi', scan: 'Analisi e scansione', vulns: 'Vulnerabilità',
+      threats: 'Minacce e incidenti', soc: 'Monitoraggio (SOC)', reports: 'Report',
+      map: 'Mappatura', team: 'Team', settings: 'Impostazioni',
+    },
+    topbar: {
+      search: 'Cerca un dispositivo, un IP, un dominio…', shortcut: 'Ctrl + K',
+      connected: 'Database connesso', syncError: 'Errore di sincronizzazione',
+      lastScan: 'Ultima scansione: {{date}}', logout: 'Esci',
+    },
+    sidebar: {
+      promoTitle: 'Una visione completa della sicurezza della tua rete', promoSub: 'Rileva • Analizza • Proteggi',
+      darkMode: 'Modalità scura', language: 'Lingua',
+    },
+    banner: {
+      title: 'Dashboard', subtitle: 'Panoramica della tua infrastruttura e della tua sicurezza',
+      slogan1: 'Più di uno strumento…', slogan2: 'un’intelligenza di rete.',
+    },
+    kpi: {
+      devices: 'Dispositivi rilevati', threats: 'Minacce bloccate', vulns: 'Vulnerabilità',
+      services: 'Servizi esposti', pending: 'In attesa', stored: 'Dati salvati', noData: 'Nessun dato',
+    },
+    map: {
+      title: 'Mappa di rete in tempo reale', offline: 'Offline', threat: 'Minaccia rilevata',
+      noDevices: 'Nessun dispositivo rilevato', addDevice: 'Aggiungi un dispositivo', site: 'Sede principale',
+    },
+    activity: {
+      title: 'Attività di rete', waiting: 'In attesa di dati', bandwidth: 'Larghezza di banda attuale',
+      packets: 'Pacchetti analizzati', inbound: 'In ingresso', outbound: 'In uscita',
+    },
+    cards: {
+      devicesTitle: 'Stato dei dispositivi', vulnTitle: 'Vulnerabilità per gravità', vulnUnresolved: 'non risolte',
+      addVuln: 'Aggiungi una vulnerabilità', threatsTitle: 'Evoluzione delle minacce', threatsRange: '7 giorni',
+      noData: 'Nessun dato',
+    },
+    right: {
+      alertsTitle: 'Avvisi e notifiche', noAlerts: 'Nessun avviso', noOpenAlerts: 'Nessun avviso aperto',
+      acknowledged: 'Presa in carico', threatsTitle: 'Minacce principali', noThreats: 'Nessuna minaccia registrata',
+      reportsTitle: 'Ultimi report', noReports: 'Nessun report',
+    },
+    devicesPage: {
+      title: 'Rete e dispositivi', count: '{{shown}} / {{total}} dispositivo/i',
+      search: 'Cerca per nome, IP o tipo…', allStatuses: 'Tutti gli stati', add: '+ Aggiungi',
+      colName: 'Nome', colIp: 'Indirizzo IP', colType: 'Tipo', colStatus: 'Stato', colPorts: 'Porte aperte',
+      colSeen: 'Ultimo accesso', colActions: 'Azioni', save: 'Salva', cancel: 'Annulla',
+      edit: 'Modifica', delete: 'Elimina', errName: 'Il nome è obbligatorio.',
+      errIp: 'Indirizzo IPv4 non valido (es. 192.168.1.10).', confirmDelete: 'Eliminare «{{name}}»?',
+      empty: 'Nessun dispositivo. Usa «+ Aggiungi» per aggiungerne uno.', noResult: 'Nessun risultato.',
+      ipPlaceholder: '192.168.1.10',
+    },
+    alertsPage: {
+      title: 'Minacce e incidenti', section: 'Avvisi',
+      sevFilter: 'Gravità', allSev: 'Tutte le gravità', statusFilter: 'Stato', allStatuses: 'Tutti gli stati',
+      colTitle: 'Titolo', colSev: 'Gravità', colStatus: 'Stato', colDetail: 'Dettaglio', colCreated: 'Creato il',
+      colAck: 'Presa in carico', colResolved: 'Risolto', colActions: 'Azioni',
+      ack: 'Prendi in carico', resolve: 'Risolvi', confirmResolve: 'Risolvere l’avviso «{{title}}»?',
+      errUpdate: 'Aggiornamento non riuscito. Controlla la connessione e riprova.',
+      empty: 'Nessun avviso', noResult: 'Nessun risultato',
+      ariaAck: 'Prendi in carico «{{title}}»', ariaResolve: 'Risolvi «{{title}}»',
+    },
+    vulnsPage: {
+      title: 'Vulnerabilità', formTitle: 'Titolo', formTitlePh: 'Titolo o CVE (es. CVE-2024-6387)',
+      severity: 'Gravità', device: 'Dispositivo (facoltativo)', deviceNone: 'Nessuno', deviceDeleted: 'Dispositivo eliminato',
+      note: 'Nota (facoltativa)', add: 'Aggiungi', colDevice: 'Dispositivo', colNote: 'Nota',
+      errTitle: 'Il titolo è obbligatorio.', confirmResolve: 'Risolvere la vulnerabilità «{{title}}»?',
+      confirmDelete: 'Eliminare la vulnerabilità «{{title}}»?',
+      empty: 'Nessuna vulnerabilità', noResult: 'Nessun risultato',
+      ariaTitle: 'Titolo di «{{title}}»', ariaSeverity: 'Gravità di «{{title}}»',
+      ariaDevice: 'Dispositivo collegato a «{{title}}»', ariaNote: 'Nota di «{{title}}»',
+      ariaSave: 'Salva «{{title}}»', ariaCancel: 'Annulla la modifica di «{{title}}»',
+      ariaEdit: 'Modifica «{{title}}»', ariaDelete: 'Elimina «{{title}}»',
+    },
+    modal: {
+      devices: 'Dispositivi', alerts: 'Avvisi', threats: 'Minacce', add: 'Aggiungi', close: 'Chiudi',
+      name: 'Nome del dispositivo', ip: 'Indirizzo IP (es. 192.168.1.10)', type: 'Tipo', status: 'Stato',
+      title: 'Titolo', detail: 'Dettaglio (facoltativo)', severity: 'Gravità', category: 'Categoria',
+      blocked: 'Blocco', blockedYes: 'Bloccata', blockedNo: 'Non bloccata',
+      alertTitle: 'Titolo dell’avviso', vulnTitle: 'Titolo o CVE (es. CVE-2024-6387)',
+    },
+    login: {
+      email: 'E-mail', password: 'Password (min. 8 caratteri)', signIn: 'Accedi',
+      signUp: 'Crea un account',
+      confirmEmail: 'Account creato. Conferma la tua e-mail, poi accedi.',
+    },
+    setup: {
+      title: 'Configurazione necessaria',
+      text: 'Crea un file .env nella radice del progetto (vedi .env.example) con VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY, poi riavvia npm run dev.',
+    },
+    status: { on: 'Online', off: 'Offline', un: 'Sconosciuto' },
+    sev: { c: 'Critica', h: 'Alta', m: 'Media', l: 'Bassa' },
+    cats: { intrusion: 'Tentativi di intrusione', malware: 'Malware / Ransomware', scan: 'Scansione delle porte', c2: 'C2 / Command & Control', autre: 'Altro' },
+    alertStatus: { open: 'Aperto', ack: 'Presa in carico', resolved: 'Risolto' },
+    type: { 'Serveur': 'Server', 'Poste': 'Postazione', 'Caméra': 'Telecamera', 'Équipement réseau': 'Dispositivo di rete', 'Accès Internet': 'Accesso Internet' },
+  },
+}
+
+const lookup = (lang, key) => {
+  const parts = key.split('.')
+  const walk = (root) => parts.reduce((node, part) => (node == null ? undefined : node[part]), root)
+  return walk(MESSAGES[lang]) ?? walk(MESSAGES[DEFAULT_LANG])
+}
+
+export function translate(lang, key, vars) {
+  const value = lookup(lang, key)
+  if (typeof value !== 'string') return key
+  if (!vars) return value
+  return value.replace(/\{\{(\w+)\}\}/g, (_, name) => (vars[name] === undefined ? '' : String(vars[name])))
+}
+
+export const dirOf = (code) => (LANGS.find((l) => l.code === code)?.dir ?? 'ltr')
+export const localeOf = (code) => (LANGS.find((l) => l.code === code)?.locale ?? 'fr-FR')
+export const isSupported = (code) => LANGS.some((l) => l.code === code)

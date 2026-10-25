@@ -5,11 +5,11 @@
 .alerts-page .alerts-err{color:var(--r);margin:6px 0;font-size:12px}
 .alerts-page .alerts-tw{overflow-x:auto}
 .alerts-page .alerts-dt{width:100%;border-collapse:collapse;font-size:13px}
-.alerts-page .alerts-dt thead th{text-align:left;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b);white-space:nowrap}
-.alerts-page .alerts-dt tbody td{text-align:left;color:var(--t);padding:10px 8px;border-bottom:1px solid #0d2a46;vertical-align:top}
+.alerts-page .alerts-dt thead th{text-align:start;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b);white-space:nowrap}
+.alerts-page .alerts-dt tbody td{text-align:start;color:var(--t);padding:10px 8px;border-bottom:1px solid #0d2a46;vertical-align:top}
 .alerts-page .alerts-dt .detail{color:var(--m);max-width:260px}
 .alerts-page .alerts-dt .acts{white-space:nowrap}
-.alerts-page .alerts-dt button{width:auto;margin:0 6px 6px 0;padding:4px 10px;font-size:12px}
+.alerts-page .alerts-dt button{width:auto;margin:0;margin-inline-end:6px;margin-block-end:6px;padding:4px 10px;font-size:12px}
 .alerts-page .alerts-dt button.ack{background:#12304e}
 .alerts-page .alerts-dt button.solve{background:#0d6b4a}
 .alerts-page .alerts-dt button:disabled{opacity:.55;cursor:not-allowed}

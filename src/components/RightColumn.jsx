@@ -1,7 +1,8 @@
 import { CATS, SEV } from '../constants'
+import { useI18n } from '../i18n/context.js'
 import './RightColumn.css'
 
-const hm = (d) => new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+const hm = (d, locale) => new Date(d).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
 
 // Statut réel d’une alerte : repli sur le défaut de la colonne (open) si null.
 const stateOf = (a) => a.status || 'open'
@@ -36,36 +37,37 @@ function Card({ title, onAdd, badge = 0, cls = '', children }) {
 const Empty = ({ text }) => <p className="m" style={{ padding: '22px 0', textAlign: 'center' }}>{text}</p>
 
 export default function RightColumn({ alerts, threats, onAddAlert, onAddThreat }) {
+  const { t, locale } = useI18n()
   const visible = alerts.filter((a) => stateOf(a) !== 'resolved').sort(newestFirst).slice(0, 4)
   const openCount = alerts.filter((a) => stateOf(a) === 'open').length
-  const counts = CATS.map((c) => ({ ...c, n: threats.filter((t) => t.category === c.k).length }))
+  const counts = CATS.map((c) => ({ ...c, label: t(`cats.${c.k}`), n: threats.filter((th) => th.category === c.k).length }))
     .filter((c) => c.n).sort((a, b) => b.n - a.n)
   const max = counts[0]?.n || 1
 
   return (
     <aside>
-      <Card title="Alertes & Notifications" cls="alerts-card" badge={openCount} onAdd={onAddAlert}>
+      <Card title={t('right.alertsTitle')} cls="alerts-card" badge={openCount} onAdd={onAddAlert}>
         {visible.length ? visible.map((a) => (
           <div className="row" key={a.id}>
-            <div className="ic" style={{ borderColor: SEV.find((s) => s.k === a.severity).color, width: 34, height: 34 }} />
+            <div className="ic" style={{ borderColor: SEV.find((s) => s.k === a.severity)?.color, width: 34, height: 34 }} />
             <div>
               <b>{a.title}</b>
               <small>{a.detail}</small>
-              {stateOf(a) === 'ack' && <small style={{ display: 'block', color: 'var(--o)' }}>Prise en compte</small>}
+              {stateOf(a) === 'ack' && <small style={{ display: 'block', color: 'var(--o)' }}>{t('right.acknowledged')}</small>}
             </div>
-            <small>{hm(a.created_at)}</small>
+            <small>{hm(a.created_at, locale)}</small>
           </div>
-        )) : <Empty text={alerts.length ? 'Aucune alerte ouverte' : 'Aucune alerte'} />}
+        )) : <Empty text={alerts.length ? t('right.noOpenAlerts') : t('right.noAlerts')} />}
       </Card>
-      <Card title="Top menaces récentes" onAdd={onAddThreat}>
+      <Card title={t('right.threatsTitle')} onAdd={onAddThreat}>
         {counts.length ? counts.slice(0, 5).map((c) => (
           <div className="row" key={c.k}>
             <div><b>{c.label}</b><div className="bar"><i style={{ width: `${(c.n / max) * 100}%`, background: c.color }} /></div></div>
             {c.n}
           </div>
-        )) : <Empty text="Aucune menace enregistrée" />}
+        )) : <Empty text={t('right.noThreats')} />}
       </Card>
-      <Card title="Derniers rapports"><Empty text="Aucun rapport" /></Card>
+      <Card title={t('right.reportsTitle')}><Empty text={t('right.noReports')} /></Card>
     </aside>
   )
 }

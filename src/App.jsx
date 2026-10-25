@@ -11,8 +11,11 @@ import DevicesPage from './components/DevicesPage'
 import AlertsPage from './components/AlertsPage'
 import VulnsPage from './components/VulnsPage'
 import { TYPES, STATUS, SEV, CATS, NAV } from './constants'
+import { useI18n } from './i18n/context.js'
+import { LanguageSelect } from './i18n/index.jsx'
 
 function Dashboard({ user }) {
+  const { t, locale } = useI18n()
   const dev = useRows('devices', user)
   const vul = useRows('vulnerabilities', user)
   const alr = useRows('alerts', user)
@@ -21,7 +24,6 @@ function Dashboard({ user }) {
   const [modal, setModal] = useState(null)
   const [page, setPage] = useState(0)
   const close = () => setModal(null)
-  const label = (list, k) => list.find((x) => x.k === k)?.label
   const error = dev.error || vul.error || alr.error || thr.error || srv.error
   const connected = !error
   const lastScan = dev.rows.reduce((latest, d) => {
@@ -63,7 +65,7 @@ function Dashboard({ user }) {
           </main>
         ) : (
           <main className="main wide">
-            <div className="card"><h3>{NAV[page]}</h3><p className="m" style={{ padding: '22px 0' }}>Cette section est en cours de développement.</p></div>
+            <div className="card"><h3>{t(`nav.${NAV[page]}`)}</h3><p className="m" style={{ padding: '22px 0' }}>{t('common.sectionSoon')}</p></div>
           </main>
         )}
       </div>
@@ -72,24 +74,24 @@ function Dashboard({ user }) {
         <span><span className="dot" style={error ? { background: 'var(--r)' } : undefined} />{error}</span>
       </footer>
       {modal === 'dev' && (
-        <Modal title="Appareils" onClose={close}
-          fields={[{ k: 'name', ph: 'Nom de l’appareil' }, { k: 'ip', ph: 'Adresse IP (ex. 192.168.1.10)' },
-            { k: 'type', opts: Object.keys(TYPES).map((t) => [t, t]) }, { k: 'status', opts: STATUS.map((s) => [s.k, s.label]) }]}
-          rows={dev.rows.map((d) => `${d.name} · ${d.ip || '—'} · ${label(STATUS, d.status)}`)}
+        <Modal title={t('modal.devices')} onClose={close}
+          fields={[{ k: 'name', ph: t('modal.name') }, { k: 'ip', ph: t('modal.ip') },
+            { k: 'type', opts: Object.keys(TYPES).map((ty) => [ty, t(`type.${ty}`)]) }, { k: 'status', opts: STATUS.map((s) => [s.k, t(`status.${s.k}`)]) }]}
+          rows={dev.rows.map((d) => `${d.name} · ${d.ip || '—'} · ${d.status ? t(`status.${d.status}`) : '—'}`)}
           onAdd={(f) => dev.add({ name: f.name.trim(), ip: f.ip.trim() || null, type: f.type, status: f.status })}
           onRemove={dev.remove} />
       )}
       {modal === 'alr' && (
-        <Modal title="Alertes" onClose={close}
-          fields={[{ k: 'title', ph: 'Titre de l’alerte' }, { k: 'detail', ph: 'Détail (facultatif)' }, { k: 'severity', opts: SEV.map((s) => [s.k, s.label]) }]}
-          rows={alr.rows.map((a) => `${label(SEV, a.severity)} · ${a.title}`)}
+        <Modal title={t('modal.alerts')} onClose={close}
+          fields={[{ k: 'title', ph: t('modal.alertTitle') }, { k: 'detail', ph: t('modal.detail') }, { k: 'severity', opts: SEV.map((s) => [s.k, t(`sev.${s.k}`)]) }]}
+          rows={alr.rows.map((a) => `${SEV.find((s) => s.k === a.severity) ? t(`sev.${a.severity}`) : (a.severity || '—')} · ${a.title}`)}
           onAdd={(f) => alr.add({ title: f.title.trim(), detail: f.detail.trim() || null, severity: f.severity })}
           onRemove={alr.remove} />
       )}
       {modal === 'thr' && (
-        <Modal title="Menaces" onClose={close}
-          fields={[{ k: 'category', opts: CATS.map((c) => [c.k, c.label]) }, { k: 'blocked', opts: [['1', 'Bloquée'], ['0', 'Non bloquée']] }]}
-          rows={thr.rows.map((t) => `${label(CATS, t.category)} · ${t.blocked ? 'Bloquée' : 'Non bloquée'} · ${new Date(t.created_at).toLocaleDateString('fr-FR')}`)}
+        <Modal title={t('modal.threats')} onClose={close}
+          fields={[{ k: 'category', opts: CATS.map((c) => [c.k, t(`cats.${c.k}`)]) }, { k: 'blocked', opts: [['1', t('modal.blockedYes')], ['0', t('modal.blockedNo')]] }]}
+          rows={thr.rows.map((th) => `${CATS.find((c) => c.k === th.category) ? t(`cats.${th.category}`) : (th.category || '—')} · ${th.blocked ? t('modal.blockedYes') : t('modal.blockedNo')} · ${new Date(th.created_at).toLocaleDateString(locale)}`)}
           onAdd={(f) => thr.add({ category: f.category, blocked: f.blocked === '1' })}
           onRemove={thr.remove} />
       )}
@@ -98,20 +100,20 @@ function Dashboard({ user }) {
 }
 
 function Setup() {
+  const { t } = useI18n()
   return (
     <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', padding: 16 }}>
       <div className="card" style={{ width: 'min(480px, 100%)' }}>
-        <h3>Configuration requise</h3>
-        <p className="m" style={{ marginTop: 10 }}>
-          Créez un fichier <b>.env</b> à la racine du projet (voir .env.example) avec VITE_SUPABASE_URL et
-          VITE_SUPABASE_ANON_KEY, puis relancez <b>npm run dev</b>.
-        </p>
+        <h3>{t('setup.title')}</h3>
+        <p className="m" style={{ marginTop: 10 }}>{t('setup.text')}</p>
+        <LanguageSelect />
       </div>
     </div>
   )
 }
 
 export default function App() {
+  const { t } = useI18n()
   const [session, setSession] = useState(null)
   const [ready, setReady] = useState(!configured)
 
@@ -123,7 +125,7 @@ export default function App() {
   }, [])
 
   if (!configured) return <Setup />
-  if (!ready) return <p className="m" style={{ padding: 24 }}>Chargement…</p>
+  if (!ready) return <p className="m" style={{ padding: 24 }}>{t('common.loading')}</p>
   if (!session) return <Login />
   return <Dashboard user={session.user} />
 }

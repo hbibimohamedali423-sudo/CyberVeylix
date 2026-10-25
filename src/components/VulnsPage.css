@@ -11,13 +11,13 @@
 .vulns-page .vulns-err{color:var(--r);margin:6px 0;font-size:12px}
 .vulns-page .vulns-tw{overflow-x:auto}
 .vulns-page .vulns-dt{width:100%;border-collapse:collapse;font-size:13px}
-.vulns-page .vulns-dt thead th{text-align:left;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b);white-space:nowrap}
-.vulns-page .vulns-dt tbody td{text-align:left;color:var(--t);padding:10px 8px;border-bottom:1px solid #0d2a46;vertical-align:top}
+.vulns-page .vulns-dt thead th{text-align:start;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b);white-space:nowrap}
+.vulns-page .vulns-dt tbody td{text-align:start;color:var(--t);padding:10px 8px;border-bottom:1px solid #0d2a46;vertical-align:top}
 .vulns-page .vulns-dt .note{color:var(--m);max-width:220px}
 .vulns-page .vulns-dt .acts{white-space:nowrap}
 .vulns-page .vulns-dt input,.vulns-page .vulns-dt select,.vulns-page .vulns-dt textarea{margin:0;font-size:12px;width:100%;min-width:110px}
 .vulns-page .vulns-dt textarea{min-height:52px;resize:vertical;background:#0a1c36;color:var(--t);border:1px solid var(--b);border-radius:6px;padding:5px 6px;font:inherit}
-.vulns-page .vulns-dt button{width:auto;margin:0 6px 6px 0;padding:4px 10px;font-size:12px}
+.vulns-page .vulns-dt button{width:auto;margin:0;margin-inline-end:6px;margin-block-end:6px;padding:4px 10px;font-size:12px}
 .vulns-page .vulns-dt button.ack{background:#12304e}
 .vulns-page .vulns-dt button.solve{background:#0d6b4a}
 .vulns-page .vulns-dt button.ghost{background:#12304e}

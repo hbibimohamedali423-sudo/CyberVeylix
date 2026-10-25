@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useI18n } from '../i18n/context.js'
 
 export default function Modal({ title, fields, rows, onAdd, onRemove, onClose }) {
+  const { t } = useI18n()
   const empty = Object.fromEntries(fields.map((x) => [x.k, x.opts ? x.opts[0][0] : '']))
   const [f, setF] = useState(empty)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -16,8 +18,8 @@ export default function Modal({ title, fields, rows, onAdd, onRemove, onClose })
         {fields.map((x) => x.opts
           ? <select key={x.k} value={f[x.k]} onChange={set(x.k)}>{x.opts.map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>
           : <input key={x.k} placeholder={x.ph} value={f[x.k]} onChange={set(x.k)} />)}
-        <button onClick={submit}>Ajouter</button>
-        <button className="x wide" onClick={onClose}>Fermer</button>
+        <button onClick={submit}>{t('modal.add')}</button>
+        <button className="x wide" onClick={onClose}>{t('modal.close')}</button>
         <div className="dl">
           {rows.map((r, i) => <div key={i}><span>{r}</span><button className="x" onClick={() => onRemove(i)}>✕</button></div>)}
         </div>

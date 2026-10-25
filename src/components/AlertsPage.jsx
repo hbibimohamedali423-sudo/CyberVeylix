@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { ALERT_STATUS, SEV } from '../constants'
+import { useI18n } from '../i18n/context.js'
 import './AlertsPage.css'
 
 // Statut réel d’une alerte : repli sur le défaut de la colonne (open) si null.
 const stateOf = (a) => a.status || 'open'
-const when = (v) => (v ? new Date(v).toLocaleString('fr-FR') : '—')
+const when = (v, locale) => (v ? new Date(v).toLocaleString(locale) : '—')
 const time = (v) => {
   if (!v) return null
   const t = new Date(v).getTime()
@@ -22,6 +23,7 @@ const newestFirst = (a, b) => {
 const find = (list, k) => list.find((x) => x.k === k)
 
 export default function AlertsPage({ alerts, onUpdate }) {
+  const { t, locale } = useI18n()
   const [sev, setSev] = useState('')
   const [status, setStatus] = useState('')
   const [err, setErr] = useState('')
@@ -38,7 +40,7 @@ export default function AlertsPage({ alerts, onUpdate }) {
       const msg = await onUpdate(a.id, patch)
       if (msg) setErr(msg)
     } catch {
-      setErr('Échec de la mise à jour. Vérifiez votre connexion puis réessayez.')
+      setErr(t('alertsPage.errUpdate'))
     } finally {
       setBusyId(null)
     }
@@ -46,7 +48,7 @@ export default function AlertsPage({ alerts, onUpdate }) {
 
   const acknowledge = (a) => run(a, { status: 'ack', acknowledged_at: new Date().toISOString() })
   const resolve = (a) => {
-    if (window.confirm(`Résoudre l’alerte « ${a.title} » ?`)) {
+    if (window.confirm(t('alertsPage.confirmResolve', { title: a.title }))) {
       run(a, { status: 'resolved', resolved_at: new Date().toISOString() })
     }
   }
@@ -54,20 +56,20 @@ export default function AlertsPage({ alerts, onUpdate }) {
   return (
     <div className="card alerts-page">
       <h3>
-        Menaces &amp; Incidents
-        <span className="m" style={{ fontWeight: 400 }}> · Alertes · {list.length} / {alerts.length}</span>
+        {t('alertsPage.title')}
+        <span className="m" style={{ fontWeight: 400 }}> · {t('alertsPage.section')} · {list.length} / {alerts.length}</span>
       </h3>
       <div className="alerts-bar">
-        <label>Gravité
+        <label>{t('alertsPage.sevFilter')}
           <select value={sev} onChange={(e) => setSev(e.target.value)}>
-            <option value="">Toutes les gravités</option>
-            {SEV.map((s) => <option key={s.k} value={s.k}>{s.label}</option>)}
+            <option value="">{t('alertsPage.allSev')}</option>
+            {SEV.map((s) => <option key={s.k} value={s.k}>{t(`sev.${s.k}`)}</option>)}
           </select>
         </label>
-        <label>Statut
+        <label>{t('alertsPage.statusFilter')}
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">Tous les statuts</option>
-            {ALERT_STATUS.map((s) => <option key={s.k} value={s.k}>{s.label}</option>)}
+            <option value="">{t('alertsPage.allStatuses')}</option>
+            {ALERT_STATUS.map((s) => <option key={s.k} value={s.k}>{t(`alertStatus.${s.k}`)}</option>)}
           </select>
         </label>
       </div>
@@ -76,8 +78,8 @@ export default function AlertsPage({ alerts, onUpdate }) {
         <table className="alerts-dt">
           <thead>
             <tr>
-              <th>Titre</th><th>Gravité</th><th>Statut</th><th>Détail</th>
-              <th>Créée le</th><th>Prise en compte</th><th>Résolue</th><th>Actions</th>
+              <th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('alertsPage.colDetail')}</th>
+              <th>{t('alertsPage.colCreated')}</th><th>{t('alertsPage.colAck')}</th><th>{t('alertsPage.colResolved')}</th><th>{t('alertsPage.colActions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -88,23 +90,23 @@ export default function AlertsPage({ alerts, onUpdate }) {
               return (
                 <tr key={a.id}>
                   <td>{a.title}</td>
-                  <td><span style={{ color: s?.color || 'var(--m)' }}>● {s?.label || a.severity || '—'}</span></td>
-                  <td><span style={{ color: st?.color || 'var(--m)' }}>● {st?.label || stateOf(a)}</span></td>
+                  <td><span style={{ color: s?.color || 'var(--m)' }}>● {s ? t(`sev.${a.severity}`) : (a.severity || '—')}</span></td>
+                  <td><span style={{ color: st?.color || 'var(--m)' }}>● {st ? t(`alertStatus.${stateOf(a)}`) : stateOf(a)}</span></td>
                   <td className="detail">{a.detail || '—'}</td>
-                  <td>{when(a.created_at)}</td>
-                  <td>{when(a.acknowledged_at)}</td>
-                  <td>{when(a.resolved_at)}</td>
+                  <td>{when(a.created_at, locale)}</td>
+                  <td>{when(a.acknowledged_at, locale)}</td>
+                  <td>{when(a.resolved_at, locale)}</td>
                   <td className="acts">
                     {stateOf(a) === 'open' && (
                       <button type="button" className="ack" disabled={busy}
-                        aria-label={`Prendre en compte « ${a.title} »`} onClick={() => acknowledge(a)}>
-                        Prendre en compte
+                        aria-label={t('alertsPage.ariaAck', { title: a.title })} onClick={() => acknowledge(a)}>
+                        {t('alertsPage.ack')}
                       </button>
                     )}
                     {(stateOf(a) === 'open' || stateOf(a) === 'ack') && (
                       <button type="button" className="solve" disabled={busy}
-                        aria-label={`Résoudre « ${a.title} »`} onClick={() => resolve(a)}>
-                        Résoudre
+                        aria-label={t('alertsPage.ariaResolve', { title: a.title })} onClick={() => resolve(a)}>
+                        {t('alertsPage.resolve')}
                       </button>
                     )}
                   </td>
@@ -114,8 +116,8 @@ export default function AlertsPage({ alerts, onUpdate }) {
           </tbody>
         </table>
       </div>
-      {!alerts.length && <p className="alerts-empty">Aucune alerte</p>}
-      {!!alerts.length && !list.length && <p className="alerts-empty">Aucun résultat</p>}
+      {!alerts.length && <p className="alerts-empty">{t('alertsPage.empty')}</p>}
+      {!!alerts.length && !list.length && <p className="alerts-empty">{t('alertsPage.noResult')}</p>}
     </div>
   )
 }
