@@ -44,8 +44,8 @@ export function NetworkMap({ devices, onAdd }) {
         <div><i style={{ background: 'var(--r)' }} />{t('map.threat')}</div>
       </div>
       <svg className="mapsvg" viewBox="0 0 600 340" preserveAspectRatio="xMidYMid slice">
-        <g fill="#0b1f3d" stroke="#14406b" opacity=".6"><path d="M150 200l120-70 150 70-120 80z" /><path d="M270 130l120-60 140 60-110 70z" /><path d="M220 270l110-60 120 60-110 55z" /></g>
-        {!devices.length && <text x="300" y="200" textAnchor="middle" fill="#8fa6c0" fontSize="14">{t('map.noDevices')}</text>}
+        <g style={{ fill: 'var(--map-land)', stroke: 'var(--map-stroke)' }} opacity=".6"><path d="M150 200l120-70 150 70-120 80z" /><path d="M270 130l120-60 140 60-110 70z" /><path d="M220 270l110-60 120 60-110 55z" /></g>
+        {!devices.length && <text x="300" y="200" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="14">{t('map.noDevices')}</text>}
         {devices.map((d, i) => {
           const [x, y] = SLOTS[i % SLOTS.length]
           const st = STATUS.find((s) => s.k === d.status)
@@ -53,7 +53,7 @@ export function NetworkMap({ devices, onAdd }) {
             <g key={i}>
               <title>{d.name} — {d.ip || '—'}</title>
               <circle cx={x} cy={y} r="9" fill={TYPES[d.type]} stroke={st?.color} strokeWidth="2" />
-              <text x={x} y={y + 22} textAnchor="middle" fill="#8fa6c0" fontSize="9">{d.name}</text>
+              <text x={x} y={y + 22} textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="9">{d.name}</text>
             </g>
           )
         })}
@@ -71,8 +71,8 @@ export function Activity() {
       <h3>{t('activity.title')} <span className="live" style={{ float: 'inline-end', color: 'var(--m)' }}>● —</span></h3>
       <div className="m" style={{ textAlign: 'end', margin: '8px 0' }}>● {t('activity.inbound')} &nbsp;<span style={{ color: 'var(--pu)' }}>● {t('activity.outbound')}</span></div>
       <svg viewBox="0 0 260 170" style={{ width: '100%' }}>
-        <g stroke="#14304f"><path d="M40 10h210M40 45h210M40 80h210M40 115h210M40 150h210" /></g>
-        <text x="145" y="85" textAnchor="middle" fill="#8fa6c0" fontSize="10">{t('activity.waiting')}</text>
+        <g style={{ stroke: 'var(--map-grid)' }}><path d="M40 10h210M40 45h210M40 80h210M40 115h210M40 150h210" /></g>
+        <text x="145" y="85" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="10">{t('activity.waiting')}</text>
       </svg>
       <div className="bw"><small>{t('activity.bandwidth')}</small><br /><b>—</b></div>
       <div className="bw"><small>{t('activity.packets')}</small><br /><b>—</b></div>
@@ -123,18 +123,18 @@ export function ThreatsCard({ threats }) {
     <div className="card">
       <h3>{t('cards.threatsTitle')} <span className="sel">{t('cards.threatsRange')} ⌄</span></h3>
       <svg viewBox="0 0 300 150" style={{ width: '100%', marginTop: 8 }}>
-        <g stroke="#14304f"><path d="M30 116h260M30 66h260M30 16h260" /></g>
-        <g fill="#8fa6c0" fontSize="9"><text x="2" y="19">{top}</text><text x="2" y="69">{top / 2}</text><text x="6" y="119">0</text></g>
+        <g style={{ stroke: 'var(--map-grid)' }}><path d="M30 116h260M30 66h260M30 16h260" /></g>
+        <g style={{ fill: 'var(--m)' }} fontSize="9"><text x="2" y="19">{top}</text><text x="2" y="69">{top / 2}</text><text x="6" y="119">0</text></g>
         {counts.map((n, i) => {
           const h = (n / top) * 100
-          return <rect key={i} x={36 + i * 37} y={116 - h} width="28" height={h} fill="#2f6df0" />
+          return <rect key={i} x={36 + i * 37} y={116 - h} width="28" height={h} style={{ fill: 'var(--chart)' }} />
         })}
         {days.map((d, i) => (
-          <text key={i} x={36 + i * 37 + 14} y="132" textAnchor="middle" fill="#8fa6c0" fontSize="8">
+          <text key={i} x={36 + i * 37 + 14} y="132" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="8">
             {d.toLocaleDateString(locale, { day: '2-digit', month: 'short' })}
           </text>
         ))}
-        {empty && <text x="160" y="70" textAnchor="middle" fill="#8fa6c0" fontSize="10">{t('cards.noData')}</text>}
+        {empty && <text x="160" y="70" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="10">{t('cards.noData')}</text>}
       </svg>
     </div>
   )

@@ -6,10 +6,10 @@
 .tw{overflow-x:auto}
 .dt{width:100%;border-collapse:collapse;font-size:13px}
 .dt thead th{text-align:start;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b)}
-.dt tbody td{text-align:start;color:var(--t);padding:10px 8px;border-bottom:1px solid #0d2a46}
+.dt tbody td{text-align:start;color:var(--t);padding:10px 8px;border-bottom:1px solid var(--row-border)}
 .dt input,.dt select{margin:0;padding:5px 6px;font-size:12px;width:100%;min-width:90px}
 .dt button{width:auto;margin:0;margin-inline-end:6px;padding:4px 10px;font-size:12px}
-.dt button.x{background:#12304e}
-.dt button.del{background:#5a1a24}
+.dt button.x{background:var(--surface2);color:var(--t)}
+.dt button.del{background:var(--danger-bg);color:var(--t)}
 .err{color:var(--r);margin:6px 0;font-size:12px}
 @media(max-width:1100px){.wide{grid-column:auto}.tb{flex-wrap:wrap}.tb select{width:100%}}

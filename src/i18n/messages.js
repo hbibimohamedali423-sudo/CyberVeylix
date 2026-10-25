@@ -30,7 +30,8 @@ export const MESSAGES = {
     },
     sidebar: {
       promoTitle: 'Une vision complète de votre sécurité réseau', promoSub: 'Détecter • Analyser • Protéger',
-      darkMode: 'Mode Sombre', language: 'Langue',
+      darkMode: 'Mode Sombre', lightMode: 'Mode Clair', language: 'Langue',
+      toggleTheme: 'Basculer entre le mode sombre et le mode clair',
     },
     banner: {
       title: 'Tableau de bord', subtitle: 'Vue d’ensemble de votre infrastructure et de votre sécurité',
@@ -131,7 +132,8 @@ export const MESSAGES = {
     },
     sidebar: {
       promoTitle: 'A complete view of your network security', promoSub: 'Detect • Analyse • Protect',
-      darkMode: 'Dark mode', language: 'Language',
+      darkMode: 'Dark mode', lightMode: 'Light mode', language: 'Language',
+      toggleTheme: 'Toggle between dark and light mode',
     },
     banner: {
       title: 'Dashboard', subtitle: 'Overview of your infrastructure and security',
@@ -231,7 +233,8 @@ export const MESSAGES = {
     },
     sidebar: {
       promoTitle: 'Ein vollständiger Überblick über Ihre Netzwerksicherheit', promoSub: 'Erkennen • Analysieren • Schützen',
-      darkMode: 'Dunkelmodus', language: 'Sprache',
+      darkMode: 'Dunkelmodus', lightMode: 'Hellmodus', language: 'Sprache',
+      toggleTheme: 'Zwischen Dunkel- und Hellmodus wechseln',
     },
     banner: {
       title: 'Dashboard', subtitle: 'Überblick über Ihre Infrastruktur und Sicherheit',
@@ -331,7 +334,8 @@ export const MESSAGES = {
     },
     sidebar: {
       promoTitle: 'رؤية كاملة لأمن شبكتك', promoSub: 'اكتشاف • تحليل • حماية',
-      darkMode: 'الوضع الداكن', language: 'اللغة',
+      darkMode: 'الوضع الداكن', lightMode: 'الوضع الفاتح', language: 'اللغة',
+      toggleTheme: 'التبديل بين الوضع الداكن والوضع الفاتح',
     },
     banner: {
       title: 'لوحة التحكم', subtitle: 'نظرة عامة على بنيتك التحتية وأمنك',
@@ -431,7 +435,8 @@ export const MESSAGES = {
     },
     sidebar: {
       promoTitle: 'Una visione completa della sicurezza della tua rete', promoSub: 'Rileva • Analizza • Proteggi',
-      darkMode: 'Modalità scura', language: 'Lingua',
+      darkMode: 'Modalità scura', lightMode: 'Modalità chiara', language: 'Lingua',
+      toggleTheme: 'Passa tra modalità scura e chiara',
     },
     banner: {
       title: 'Dashboard', subtitle: 'Panoramica della tua infrastruttura e della tua sicurezza',
