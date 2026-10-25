@@ -6,17 +6,20 @@ export default function useRows(table, user) {
   const [rows, setRows] = useState([])
   const [error, setError] = useState('')
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isActive = () => true) => {
     const { data, error: e } = await supabase.from(table).select('*').order('created_at')
+    if (!isActive()) return
     if (e) setError(e.message)
     else { setRows(data); setError('') }
   }, [table])
 
   useEffect(() => {
     if (!user) return
-    load()
-    const t = setInterval(load, 15000)
-    return () => clearInterval(t)
+    let active = true
+    const isActive = () => active
+    const first = setTimeout(() => { load(isActive) }, 0)
+    const t = setInterval(() => { load(isActive) }, 15000)
+    return () => { active = false; clearTimeout(first); clearInterval(t) }
   }, [user, load])
 
   const add = async (row) => {
