@@ -30,8 +30,8 @@ export default function useRows(table, user) {
     return null
   }
 
-  const remove = async (i) => {
-    const { error: e } = await supabase.from(table).delete().eq('id', rows[i].id)
+  const remove = async (id) => {
+    const { error: e } = await supabase.from(table).delete().eq('id', id)
     if (e) { setError(e.message); return e.message }
     load()
     return null

@@ -77,21 +77,21 @@ function Dashboard({ user }) {
         <Modal title={t('modal.devices')} onClose={close}
           fields={[{ k: 'name', ph: t('modal.name') }, { k: 'ip', ph: t('modal.ip') },
             { k: 'type', opts: Object.keys(TYPES).map((ty) => [ty, t(`type.${ty}`)]) }, { k: 'status', opts: STATUS.map((s) => [s.k, t(`status.${s.k}`)]) }]}
-          rows={dev.rows.map((d) => `${d.name} · ${d.ip || '—'} · ${d.status ? t(`status.${d.status}`) : '—'}`)}
+          rows={dev.rows.map((d) => ({ id: d.id, label: `${d.name} · ${d.ip || '—'} · ${d.status ? t(`status.${d.status}`) : '—'}` }))}
           onAdd={(f) => dev.add({ name: f.name.trim(), ip: f.ip.trim() || null, type: f.type, status: f.status })}
           onRemove={dev.remove} />
       )}
       {modal === 'alr' && (
         <Modal title={t('modal.alerts')} onClose={close}
           fields={[{ k: 'title', ph: t('modal.alertTitle') }, { k: 'detail', ph: t('modal.detail') }, { k: 'severity', opts: SEV.map((s) => [s.k, t(`sev.${s.k}`)]) }]}
-          rows={alr.rows.map((a) => `${SEV.find((s) => s.k === a.severity) ? t(`sev.${a.severity}`) : (a.severity || '—')} · ${a.title}`)}
+          rows={alr.rows.map((a) => ({ id: a.id, label: `${SEV.find((s) => s.k === a.severity) ? t(`sev.${a.severity}`) : (a.severity || '—')} · ${a.title}` }))}
           onAdd={(f) => alr.add({ title: f.title.trim(), detail: f.detail.trim() || null, severity: f.severity })}
           onRemove={alr.remove} />
       )}
       {modal === 'thr' && (
         <Modal title={t('modal.threats')} onClose={close}
           fields={[{ k: 'category', opts: CATS.map((c) => [c.k, t(`cats.${c.k}`)]) }, { k: 'blocked', opts: [['1', t('modal.blockedYes')], ['0', t('modal.blockedNo')]] }]}
-          rows={thr.rows.map((th) => `${CATS.find((c) => c.k === th.category) ? t(`cats.${th.category}`) : (th.category || '—')} · ${th.blocked ? t('modal.blockedYes') : t('modal.blockedNo')} · ${new Date(th.created_at).toLocaleDateString(locale)}`)}
+          rows={thr.rows.map((th) => ({ id: th.id, label: `${CATS.find((c) => c.k === th.category) ? t(`cats.${th.category}`) : (th.category || '—')} · ${th.blocked ? t('modal.blockedYes') : t('modal.blockedNo')} · ${new Date(th.created_at).toLocaleDateString(locale)}` }))}
           onAdd={(f) => thr.add({ category: f.category, blocked: f.blocked === '1' })}
           onRemove={thr.remove} />
       )}

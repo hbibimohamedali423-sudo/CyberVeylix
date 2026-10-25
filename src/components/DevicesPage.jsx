@@ -41,8 +41,19 @@ export default function DevicesPage({ devices, services = [], onAddClick, onUpda
       setErr(t('common.updateError'))
     }
   }
-  const del = (d) => {
-    if (window.confirm(t('devicesPage.confirmDelete', { name: d.name }))) onRemove(devices.indexOf(d))
+  const del = async (d) => {
+    if (!window.confirm(t('devicesPage.confirmDelete', { name: d.name }))) return
+    setErr('')
+    try {
+      const msg = await onRemove(d.id)
+      if (msg) {
+        setErr(msg)
+        console.error('Device delete failed:', msg)
+      }
+    } catch (e) {
+      setErr(t('common.updateError'))
+      console.error('Device delete threw:', e)
+    }
   }
 
   return (

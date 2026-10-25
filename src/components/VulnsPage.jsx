@@ -52,8 +52,9 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
       const msg = await call()
       if (msg) { setErr(msg); return false }
       return true
-    } catch {
+    } catch (e) {
       setErr(t('common.updateError'))
+      console.error('VulnsPage operation failed:', e)
       return false
     } finally {
       setBusy('')
@@ -69,7 +70,7 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
 
   const removeVuln = (v) => {
     if (!window.confirm(t('vulnsPage.confirmDelete', { title: v.title }))) return
-    act(`del:${v.id}`, () => onRemove(vulns.indexOf(v)))
+    act(`del:${v.id}`, () => onRemove(v.id))
   }
 
   const startEdit = (v) => {
