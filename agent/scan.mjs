@@ -1,5 +1,6 @@
 // CyberVeylix — agent de découverte réseau (inventaire de VOTRE réseau uniquement)
 import net from 'node:net'
+import os from 'node:os'
 import dns from 'node:dns/promises'
 import { execFile, spawnSync } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -172,6 +173,18 @@ if (CHECK) {
 
 const { hosts, inRange } = parseCidr(CIDR)
 console.log(`Réseau ${CIDR} — ${hosts.length} adresses`)
+
+// --local-only : pour les lancements automatiques. Si cet ordinateur n'est pas sur le réseau cible
+// (autre Wi-Fi, déplacement), on ne scanne rien et on ne modifie aucune donnée.
+if (args.includes('--local-only')) {
+  const local = Object.values(os.networkInterfaces()).flat()
+    .filter((i) => i && i.family === 'IPv4' && !i.internal)
+  if (!local.some((i) => inRange(i.address))) {
+    console.log('Cet ordinateur n’est pas connecté au réseau cible : scan ignoré (aucune donnée modifiée).')
+    process.exit(0)
+  }
+}
+
 await login()
 
 console.log('1/3 Découverte (ping + ARP)…')

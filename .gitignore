@@ -5,3 +5,9 @@ dist
 .env.*
 !.env.example
 .DS_Store
+
+agent/*.log
+
+agent/*.log
+
+agent/*.log
