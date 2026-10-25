@@ -1,0 +1,18 @@
+/* Toutes les règles sont limitées à .alerts-page : aucun style global (Vite regroupe le CSS). */
+.alerts-page .alerts-bar{display:flex;flex-wrap:wrap;gap:14px;margin:12px 0}
+.alerts-page .alerts-bar label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--m)}
+.alerts-page .alerts-bar select{width:200px;margin:0}
+.alerts-page .alerts-err{color:var(--r);margin:6px 0;font-size:12px}
+.alerts-page .alerts-tw{overflow-x:auto}
+.alerts-page .alerts-dt{width:100%;border-collapse:collapse;font-size:13px}
+.alerts-page .alerts-dt thead th{text-align:left;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b);white-space:nowrap}
+.alerts-page .alerts-dt tbody td{text-align:left;color:var(--t);padding:10px 8px;border-bottom:1px solid #0d2a46;vertical-align:top}
+.alerts-page .alerts-dt .detail{color:var(--m);max-width:260px}
+.alerts-page .alerts-dt .acts{white-space:nowrap}
+.alerts-page .alerts-dt button{width:auto;margin:0 6px 6px 0;padding:4px 10px;font-size:12px}
+.alerts-page .alerts-dt button.ack{background:#12304e}
+.alerts-page .alerts-dt button.solve{background:#0d6b4a}
+.alerts-page .alerts-dt button:disabled{opacity:.55;cursor:not-allowed}
+.alerts-page .alerts-empty{padding:22px 0;text-align:center;color:var(--m)}
+.alerts-page select:focus-visible,.alerts-page button:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+@media(max-width:1100px){.alerts-page .alerts-bar select{width:100%}.alerts-page .alerts-bar label{flex:1 1 160px}}

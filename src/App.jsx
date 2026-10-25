@@ -8,6 +8,7 @@ import Modal from './components/Modal'
 import Login from './components/Login'
 import { Banner, Kpis, NetworkMap, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
 import DevicesPage from './components/DevicesPage'
+import AlertsPage from './components/AlertsPage'
 import { TYPES, STATUS, SEV, CATS, NAV } from './constants'
 
 function Dashboard({ user }) {
@@ -51,6 +52,10 @@ function Dashboard({ user }) {
         </>) : page === 1 ? (
           <main className="main wide">
             <DevicesPage devices={dev.rows} services={srv.rows} onAddClick={() => setModal('dev')} onUpdate={dev.update} onRemove={dev.remove} />
+          </main>
+        ) : page === 4 ? (
+          <main className="main wide">
+            <AlertsPage alerts={alr.rows} onUpdate={alr.update} />
           </main>
         ) : (
           <main className="main wide">
