@@ -11,12 +11,20 @@ export const Banner = () => (
 export function Kpis({ counts }) {
   return (
     <section className="kpis">
-      {KPIS.map((k, i) => (
-        <div key={k.label} className={`card kpi ${k.cls}`}>
-          <div className="ic" />
-          <div><div>{k.label}</div><b>{counts[i] || '—'}</b><br /><small>{counts[i] ? 'Données enregistrées' : 'Aucune donnée'}</small></div>
-        </div>
-      ))}
+      {KPIS.map((k, i) => {
+        const n = counts[i]
+        const known = typeof n === 'number'
+        return (
+          <div key={k.label} className={`card kpi ${k.cls}`}>
+            <div className="ic" />
+            <div>
+              <div>{k.label}</div>
+              <b>{known ? n : '—'}</b><br />
+              <small>{!known ? 'En attente' : n ? 'Données enregistrées' : 'Aucune donnée'}</small>
+            </div>
+          </div>
+        )
+      })}
     </section>
   )
 }

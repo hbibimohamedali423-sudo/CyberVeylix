@@ -17,6 +17,11 @@ export const SEV = [
   { k: 'm', label: 'Moyenne', color: '#f5c542' },
   { k: 'l', label: 'Basse', color: '#8fa6c0' },
 ]
+export const ALERT_STATUS = [
+  { k: 'open', label: 'Ouverte', color: '#ff9a2e' },
+  { k: 'ack', label: 'Prise en compte', color: '#17a6f5' },
+  { k: 'resolved', label: 'Résolue', color: '#1ed98a' },
+]
 export const SLOTS = [[300,150],[380,190],[230,200],[340,240],[420,130],[190,250],[300,290],[450,200],[260,130],[390,260],[340,100],[480,250]]
 export const CATS = [
   { k: 'intrusion', label: 'Tentatives d’intrusion', color: '#ff3b4e' },

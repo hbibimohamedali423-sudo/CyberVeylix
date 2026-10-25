@@ -5,12 +5,13 @@ import { supabase } from './supabaseClient'
 export default function useRows(table, user) {
   const [rows, setRows] = useState([])
   const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)
 
   const load = useCallback(async (isActive = () => true) => {
     const { data, error: e } = await supabase.from(table).select('*').order('created_at')
     if (!isActive()) return
     if (e) setError(e.message)
-    else { setRows(data); setError('') }
+    else { setRows(data); setError(''); setLoaded(true) }
   }, [table])
 
   useEffect(() => {
@@ -42,5 +43,5 @@ export default function useRows(table, user) {
     return null
   }
 
-  return { rows, error, add, remove, update }
+  return { rows, error, loaded, add, remove, update }
 }

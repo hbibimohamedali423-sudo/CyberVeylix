@@ -36,7 +36,7 @@ function Dashboard({ user }) {
         {page === 0 ? (<>
         <main className="main">
           <Banner />
-          <Kpis counts={[dev.rows.length, thr.rows.filter((t) => t.blocked).length, vul.rows.length, srv.rows.length]} />
+          <Kpis counts={[dev.loaded ? dev.rows.length : null, thr.loaded ? thr.rows.filter((t) => t.blocked).length : null, vul.loaded ? vul.rows.length : null, srv.loaded ? srv.rows.length : null]} />
           <section className="mid">
             <NetworkMap devices={dev.rows} onAdd={() => setModal('dev')} />
             <Activity />
@@ -60,7 +60,7 @@ function Dashboard({ user }) {
       </div>
       <footer>
         <span>CyberVeylix ✦ v1.0.0 &nbsp;&nbsp; Network Intelligence &amp; Cybersecurity</span>
-        <span><span className="dot" style={error ? { background: 'var(--r)' } : undefined} />{error || 'Connecté à Supabase'}</span>
+        <span><span className="dot" style={error ? { background: 'var(--r)' } : undefined} />{error}</span>
       </footer>
       {modal === 'dev' && (
         <Modal title="Appareils" onClose={close}
