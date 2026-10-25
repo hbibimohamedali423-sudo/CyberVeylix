@@ -1,4 +1,7 @@
+import { useI18n } from '../i18n/context.js'
+
 export default function Donut({ items }) {
+  const { t } = useI18n()
   const total = items.reduce((a, i) => a + i.n, 0)
   const arcs = items.reduce((acc, i) => {
     const pc = total ? (i.n / total) * 100 : 0
@@ -15,7 +18,7 @@ export default function Donut({ items }) {
         ) : null))}
       </g>
       <text x="21" y="22" textAnchor="middle" style={{ fill: 'var(--t)' }} fontSize="9" fontWeight="600">{total}</text>
-      <text x="21" y="28" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="4">Total</text>
+      <text x="21" y="28" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="4">{t('common.total')}</text>
     </svg>
   )
 }

@@ -16,6 +16,7 @@ export const MESSAGES = {
       add: 'Ajouter', save: 'Enregistrer', cancel: 'Annuler', edit: 'Modifier', delete: 'Supprimer',
       close: 'Fermer', all: 'Tous', none: 'Aucun', loading: 'Chargement…', yes: 'Oui', no: 'Non',
       updateError: "Échec de l’opération. Vérifiez votre connexion puis réessayez.", dash: '—',
+      total: 'Total',
       sectionSoon: 'Cette section est en cours de développement.',
     },
     nav: {
@@ -118,11 +119,12 @@ export const MESSAGES = {
       add: 'Add', save: 'Save', cancel: 'Cancel', edit: 'Edit', delete: 'Delete', close: 'Close',
       all: 'All', none: 'None', loading: 'Loading…', yes: 'Yes', no: 'No',
       updateError: 'Operation failed. Check your connection and try again.', dash: '—',
+      total: 'Total',
       sectionSoon: 'This section is under development.',
     },
     nav: {
       home: 'Home', devices: 'Network & Devices', scan: 'Analysis & Scan', vulns: 'Vulnerabilities',
-      threats: 'Threats & Incidents', soc: 'Surveillance (SOC)', reports: 'Reports',
+      threats: 'Threats & Incidents', soc: 'Monitoring (SOC)', reports: 'Reports',
       map: 'Mapping', team: 'Team', settings: 'Settings',
     },
     topbar: {
@@ -219,6 +221,7 @@ export const MESSAGES = {
       add: 'Hinzufügen', save: 'Speichern', cancel: 'Abbrechen', edit: 'Bearbeiten', delete: 'Löschen',
       close: 'Schließen', all: 'Alle', none: 'Keine', loading: 'Wird geladen…', yes: 'Ja', no: 'Nein',
       updateError: 'Vorgang fehlgeschlagen. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.', dash: '—',
+      total: 'Gesamt',
       sectionSoon: 'Dieser Bereich wird noch entwickelt.',
     },
     nav: {
@@ -320,6 +323,7 @@ export const MESSAGES = {
       add: 'إضافة', save: 'حفظ', cancel: 'إلغاء', edit: 'تعديل', delete: 'حذف', close: 'إغلاق',
       all: 'الكل', none: 'لا شيء', loading: 'جارٍ التحميل…', yes: 'نعم', no: 'لا',
       updateError: 'فشلت العملية. تحقق من اتصالك ثم أعد المحاولة.', dash: '—',
+      total: 'الإجمالي',
       sectionSoon: 'هذا القسم قيد التطوير.',
     },
     nav: {
@@ -421,6 +425,7 @@ export const MESSAGES = {
       add: 'Aggiungi', save: 'Salva', cancel: 'Annulla', edit: 'Modifica', delete: 'Elimina', close: 'Chiudi',
       all: 'Tutti', none: 'Nessuno', loading: 'Caricamento…', yes: 'Sì', no: 'No',
       updateError: 'Operazione non riuscita. Controlla la connessione e riprova.', dash: '—',
+      total: 'Totale',
       sectionSoon: 'Questa sezione è in fase di sviluppo.',
     },
     nav: {

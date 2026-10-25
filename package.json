@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node scripts/csv-check.mjs && node scripts/i18n-check.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
