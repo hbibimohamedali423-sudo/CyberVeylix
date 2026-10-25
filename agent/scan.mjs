@@ -200,7 +200,7 @@ const alive = await pool([...up].sort((a, b) => toInt(a) - toInt(b)), 8, async (
 for (const h of alive) console.log(`    ${h.ip.padEnd(15)} ${(h.name || '-').padEnd(20)} ${h.ports.join(',') || '-'}`)
 
 console.log('3/3 Enregistrement…')
-const existing = must(await sb.from('devices').select('id,ip,status')) || []
+const existing = must(await sb.from('devices').select('id,ip,status,last_seen')) || []
 const byIp = new Map()
 for (const d of existing) if (d.ip && !byIp.has(d.ip)) byIp.set(d.ip, d)
 const now = new Date().toISOString()
@@ -239,11 +239,20 @@ for (const h of alive) {
 }
 
 const seen = new Set(alive.map((h) => h.ip))
+// Un appareil absent n'est déclaré « Hors ligne » qu'après 90 minutes sans être vu
+// (évite le va-et-vient des téléphones et objets connectés qui s'endorment entre deux scans).
+const GRACE_MS = 90 * 60 * 1000
+const lastSeenMs = (d) => (d.last_seen ? new Date(d.last_seen).getTime() : 0)
 let off = 0
+let pending = 0
 for (const d of existing) {
   if (d.ip && inRange(d.ip) && !seen.has(d.ip) && d.status !== 'off') {
-    must(await sb.from('devices').update({ status: 'off' }).eq('id', d.id))
-    off++
+    if (Date.now() - lastSeenMs(d) > GRACE_MS) {
+      must(await sb.from('devices').update({ status: 'off' }).eq('id', d.id))
+      off++
+    } else {
+      pending++
+    }
   }
 }
 
@@ -259,4 +268,5 @@ if (baseline) {
 
 await sb.auth.signOut()
 console.log(`✔ Terminé : ${alive.length} appareil(s) en ligne, ${off} passé(s) hors ligne.`)
+if (pending) console.log(`  ${pending} appareil(s) absent(s) depuis moins de 90 min : statut inchangé.`)
 console.log('  Le type des nouveaux appareils est une estimation : corrigez-le dans « Réseau & Appareils ».')
