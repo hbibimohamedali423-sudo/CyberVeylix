@@ -1,6 +1,9 @@
 import Donut from './Donut'
+import Topology from './Topology'
 import { KPIS, TYPES, STATUS, SEV, SLOTS } from '../constants'
 import { useI18n } from '../i18n/context.js'
+
+export { Topology }
 
 export function Banner() {
   const { t } = useI18n()

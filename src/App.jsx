@@ -6,7 +6,7 @@ import Sidebar from './components/Sidebar'
 import RightColumn from './components/RightColumn'
 import Modal from './components/Modal'
 import Login from './components/Login'
-import { Banner, Kpis, NetworkMap, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
+import { Topology, Kpis, NetworkMap, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
 import DevicesPage from './components/DevicesPage'
 import AlertsPage from './components/AlertsPage'
 import VulnsPage from './components/VulnsPage'
@@ -38,7 +38,7 @@ function Dashboard({ user }) {
         <Sidebar active={page} onChange={setPage} />
         {page === 0 ? (<>
         <main className="main">
-          <Banner />
+          <Topology devices={dev.rows} services={srv.rows} />
           <Kpis counts={[dev.loaded ? dev.rows.length : null, thr.loaded ? thr.rows.filter((t) => t.blocked).length : null, vul.loaded ? vul.rows.filter((v) => (v.status || 'open') !== 'resolved').length : null, srv.loaded ? srv.rows.length : null]} />
           <section className="mid">
             <NetworkMap devices={dev.rows} onAdd={() => setModal('dev')} />
