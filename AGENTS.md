@@ -7,3 +7,4 @@
 - Scanner (agent/scan.mjs): private ranges only, explicit --yes authorization. No public-IP scanning, exploitation or brute force. No Node-only scanning in the React frontend.
 - Work in small phases. Before editing, present a short plan and wait for approval.
 - After each phase run `npm run lint` and `npm run build`, and report the real output (never claim an untested pass). List files changed.
+- Never read or print agent/snmp.json (SNMP credentials).
