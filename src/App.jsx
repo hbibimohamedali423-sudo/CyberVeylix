@@ -6,11 +6,13 @@ import Sidebar from './components/Sidebar'
 import RightColumn from './components/RightColumn'
 import Modal from './components/Modal'
 import Login from './components/Login'
-import { Topology, Kpis, NetworkMap, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
+import { Kpis, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
+import TopologyPage from './components/TopologyPage'
+import TopologySummary from './components/TopologySummary'
 import DevicesPage from './components/DevicesPage'
 import AlertsPage from './components/AlertsPage'
 import VulnsPage from './components/VulnsPage'
-import { TYPES, STATUS, SEV, CATS, NAV } from './constants'
+import { TYPES, STATUS, SEV, CATS } from './constants'
 import { useI18n } from './i18n/context.js'
 import { LanguageSelect } from './i18n/index.jsx'
 
@@ -22,7 +24,7 @@ function Dashboard({ user }) {
   const thr = useRows('threats', user)
   const srv = useRows('services', user)
   const [modal, setModal] = useState(null)
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useState('home')
   const close = () => setModal(null)
   const error = dev.error || vul.error || alr.error || thr.error || srv.error
   const connected = !error
@@ -34,38 +36,39 @@ function Dashboard({ user }) {
   return (
     <>
       <Topbar email={user.email} onLogout={() => supabase.auth.signOut()} connected={connected} lastScan={lastScan} />
-      <div className="wrap">
+      <div className={`wrap${page === 'topology' ? ' page-wide' : ''}`}>
         <Sidebar active={page} onChange={setPage} />
-        {page === 0 ? (<>
+        {page === 'home' ? (<>
         <main className="main">
-          <Topology devices={dev.rows} services={srv.rows} loaded={dev.loaded} />
           <Kpis counts={[dev.loaded ? dev.rows.length : null, thr.loaded ? thr.rows.filter((t) => t.blocked).length : null, vul.loaded ? vul.rows.filter((v) => (v.status || 'open') !== 'resolved').length : null, srv.loaded ? srv.rows.length : null]} />
           <section className="mid">
-            <NetworkMap devices={dev.rows} onAdd={() => setModal('dev')} />
+            <TopologySummary devices={dev.rows} loaded={dev.loaded} lastScan={lastScan} onOpen={() => setPage('topology')} />
             <Activity />
           </section>
           <section className="bot">
             <DevicesCard devices={dev.rows} />
-            <VulnCard vulns={vul.rows} onAdd={() => setPage(3)} />
+            <VulnCard vulns={vul.rows} onAdd={() => setPage('vulns')} />
             <ThreatsCard threats={thr.rows} />
           </section>
         </main>
         <RightColumn alerts={alr.rows} threats={thr.rows} onAddAlert={() => setModal('alr')} onAddThreat={() => setModal('thr')} />
-        </>) : page === 1 ? (
+        </>) : page === 'devices' ? (
           <main className="main wide">
             <DevicesPage devices={dev.rows} services={srv.rows} onAddClick={() => setModal('dev')} onUpdate={dev.update} onRemove={dev.remove} />
           </main>
-        ) : page === 3 ? (
+        ) : page === 'topology' ? (
+          <TopologyPage devices={dev.rows} services={srv.rows} loaded={dev.loaded} />
+        ) : page === 'vulns' ? (
           <main className="main wide">
             <VulnsPage vulns={vul.rows} devices={dev.rows} onAdd={vul.add} onUpdate={vul.update} onRemove={vul.remove} />
           </main>
-        ) : page === 4 ? (
+        ) : page === 'threats' ? (
           <main className="main wide">
             <AlertsPage alerts={alr.rows} onUpdate={alr.update} />
           </main>
         ) : (
           <main className="main wide">
-            <div className="card"><h3>{t(`nav.${NAV[page]}`)}</h3><p className="m" style={{ padding: '22px 0' }}>{t('common.sectionSoon')}</p></div>
+            <div className="card"><h3>{t(`nav.${page}`)}</h3><p className="m" style={{ padding: '22px 0' }}>{t('common.sectionSoon')}</p></div>
           </main>
         )}
       </div>

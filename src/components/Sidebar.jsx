@@ -9,7 +9,11 @@ export default function Sidebar({ active, onChange }) {
   const dark = theme === 'dark'
   return (
     <div>
-      <nav>{NAV.map((n, i) => <a key={n} className={i === active ? 'on' : ''} onClick={() => onChange(i)}><i />{t(`nav.${n}`)}</a>)}</nav>
+      <nav>{NAV.map((n) => (
+        <button key={n} type="button" className={n === active ? 'on' : ''} aria-current={n === active ? 'page' : undefined} onClick={() => onChange(n)}>
+          <i aria-hidden="true" />{t(`nav.${n}`)}
+        </button>
+      ))}</nav>
       <div className="promo"><div className="shield" /><b>{t('sidebar.promoTitle')}</b><span>{t('sidebar.promoSub')}</span></div>
       <button type="button" className="tg-btn" role="switch" aria-checked={dark}
         aria-label={t('sidebar.toggleTheme')} onClick={toggleTheme}>

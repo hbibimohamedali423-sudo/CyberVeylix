@@ -22,7 +22,7 @@ export const MESSAGES = {
     nav: {
       home: 'Accueil', devices: 'Réseau & Appareils', scan: 'Analyse & Scan', vulns: 'Vulnérabilités',
       threats: 'Menaces & Incidents', soc: 'Surveillance (SOC)', reports: 'Rapports',
-      map: 'Cartographie', team: 'Équipe', settings: 'Paramètres',
+      topology: 'Topologie', team: 'Équipe', settings: 'Paramètres',
     },
     topbar: {
       search: 'Rechercher un appareil, une IP, un domaine…', shortcut: 'Ctrl + K',
@@ -60,6 +60,24 @@ export const MESSAGES = {
       mapLabel: 'Carte logique du réseau',
       canvasHint: 'Utilisez les flèches pour déplacer la carte, + et − pour zoomer, 0 pour ajuster.',
       zoomIn: 'Zoom avant', zoomOut: 'Zoom arrière', fit: 'Ajuster',
+    },
+    topologyPage: {
+      fullscreen: 'Plein écran',
+      exitFullscreen: 'Quitter le plein écran',
+      fullscreenUnavailable: 'Le plein écran n’est pas pris en charge par ce navigateur.',
+      fullscreenError: 'Impossible de passer en plein écran.',
+    },
+    topologySummary: {
+      title: 'Topologie réseau',
+      subtitle: 'Vue d’ensemble de votre infrastructure.',
+      devices: 'Appareils',
+      subnets: 'Sous-réseaux',
+      online: 'En ligne',
+      lastScan: 'Dernier scan',
+      never: 'Jamais',
+      open: 'Ouvrir la topologie',
+      loading: 'Chargement de l’inventaire…',
+      empty: 'Aucun appareil dans l’inventaire.',
     },
     kpi: {
       devices: 'Appareils détectés', threats: 'Menaces bloquées', vulns: 'Vulnérabilités',
@@ -148,7 +166,7 @@ export const MESSAGES = {
     nav: {
       home: 'Home', devices: 'Network & Devices', scan: 'Analysis & Scan', vulns: 'Vulnerabilities',
       threats: 'Threats & Incidents', soc: 'Monitoring (SOC)', reports: 'Reports',
-      map: 'Mapping', team: 'Team', settings: 'Settings',
+      topology: 'Topology', team: 'Team', settings: 'Settings',
     },
     topbar: {
       search: 'Search for a device, an IP, a domain…', shortcut: 'Ctrl + K',
@@ -186,6 +204,24 @@ export const MESSAGES = {
       mapLabel: 'Logical network map',
       canvasHint: 'Use arrow keys to pan, + and \u2212 to zoom, 0 to fit.',
       zoomIn: 'Zoom in', zoomOut: 'Zoom out', fit: 'Fit to screen',
+    },
+    topologyPage: {
+      fullscreen: 'Full screen',
+      exitFullscreen: 'Exit full screen',
+      fullscreenUnavailable: 'Full screen is not supported by this browser.',
+      fullscreenError: 'Unable to enter full screen.',
+    },
+    topologySummary: {
+      title: 'Network topology',
+      subtitle: 'Overview of your infrastructure.',
+      devices: 'Devices',
+      subnets: 'Subnets',
+      online: 'Online',
+      lastScan: 'Last scan',
+      never: 'Never',
+      open: 'Open topology',
+      loading: 'Loading inventory…',
+      empty: 'No devices in the inventory.',
     },
     kpi: {
       devices: 'Devices detected', threats: 'Threats blocked', vulns: 'Vulnerabilities',
@@ -273,7 +309,7 @@ export const MESSAGES = {
     nav: {
       home: 'Startseite', devices: 'Netzwerk & Geräte', scan: 'Analyse & Scan', vulns: 'Schwachstellen',
       threats: 'Bedrohungen & Vorfälle', soc: 'Überwachung (SOC)', reports: 'Berichte',
-      map: 'Kartografie', team: 'Team', settings: 'Einstellungen',
+      topology: 'Topologie', team: 'Team', settings: 'Einstellungen',
     },
     topbar: {
       search: 'Gerät, IP oder Domain suchen…', shortcut: 'Ctrl + K',
@@ -311,6 +347,24 @@ export const MESSAGES = {
       mapLabel: 'Logische Netzwerkkarte',
       canvasHint: 'Pfeiltasten zum Verschieben, + und \u2212 zum Zoomen, 0 zum Anpassen.',
       zoomIn: 'Hineinzoomen', zoomOut: 'Herauszoomen', fit: 'Anpassen',
+    },
+    topologyPage: {
+      fullscreen: 'Vollbild',
+      exitFullscreen: 'Vollbild beenden',
+      fullscreenUnavailable: 'Vollbild wird von diesem Browser nicht unterstützt.',
+      fullscreenError: 'Vollbild kann nicht aktiviert werden.',
+    },
+    topologySummary: {
+      title: 'Netzwerktopologie',
+      subtitle: 'Überblick über Ihre Infrastruktur.',
+      devices: 'Geräte',
+      subnets: 'Subnetze',
+      online: 'Online',
+      lastScan: 'Letzter Scan',
+      never: 'Nie',
+      open: 'Topologie öffnen',
+      loading: 'Inventar wird geladen…',
+      empty: 'Keine Geräte im Inventar.',
     },
     kpi: {
       devices: 'Erkannte Geräte', threats: 'Blockierte Bedrohungen', vulns: 'Schwachstellen',
@@ -398,7 +452,7 @@ export const MESSAGES = {
     nav: {
       home: 'الرئيسية', devices: 'الشبكة والأجهزة', scan: 'التحليل والفحص', vulns: 'الثغرات',
       threats: 'التهديدات والحوادث', soc: 'المراقبة (SOC)', reports: 'التقارير',
-      map: 'رسم الخرائط', team: 'الفريق', settings: 'الإعدادات',
+      topology: 'الطوبولوجيا', team: 'الفريق', settings: 'الإعدادات',
     },
     topbar: {
       search: 'ابحث عن جهاز أو عنوان IP أو نطاق…', shortcut: 'Ctrl + K',
@@ -436,6 +490,24 @@ export const MESSAGES = {
       mapLabel: 'خريطة الشبكة المنطقية',
       canvasHint: 'استخدم الأسهم للتحريك، و+ و− للتكبير، و0 للضبط.',
       zoomIn: 'تكبير', zoomOut: 'تصغير', fit: 'ضبط',
+    },
+    topologyPage: {
+      fullscreen: 'ملء الشاشة',
+      exitFullscreen: 'الخروج من ملء الشاشة',
+      fullscreenUnavailable: 'ملء الشاشة غير مدعوم في هذا المتصفح.',
+      fullscreenError: 'تعذر تفعيل ملء الشاشة.',
+    },
+    topologySummary: {
+      title: 'طوبولوجيا الشبكة',
+      subtitle: 'نظرة عامة على بنيتك التحتية.',
+      devices: 'الأجهزة',
+      subnets: 'الشبكات الفرعية',
+      online: 'متصل',
+      lastScan: 'آخر فحص',
+      never: 'أبداً',
+      open: 'فتح الطوبولوجيا',
+      loading: 'جارٍ تحميل المخزون…',
+      empty: 'لا توجد أجهزة في المخزون.',
     },
     kpi: {
       devices: 'الأجهزة المكتشفة', threats: 'التهديدات المحظورة', vulns: 'الثغرات',
@@ -523,7 +595,7 @@ export const MESSAGES = {
     nav: {
       home: 'Home', devices: 'Rete e dispositivi', scan: 'Analisi e scansione', vulns: 'Vulnerabilità',
       threats: 'Minacce e incidenti', soc: 'Monitoraggio (SOC)', reports: 'Report',
-      map: 'Mappatura', team: 'Team', settings: 'Impostazioni',
+      topology: 'Topologia', team: 'Team', settings: 'Impostazioni',
     },
     topbar: {
       search: 'Cerca un dispositivo, un IP, un dominio…', shortcut: 'Ctrl + K',
@@ -561,6 +633,24 @@ export const MESSAGES = {
       mapLabel: 'Mappa logica della rete',
       canvasHint: 'Usa le frecce per spostare, + e \u2212 per zoomare, 0 per adattare.',
       zoomIn: 'Ingrandisci', zoomOut: 'Riduci', fit: 'Adatta',
+    },
+    topologyPage: {
+      fullscreen: 'Schermo intero',
+      exitFullscreen: 'Esci da schermo intero',
+      fullscreenUnavailable: 'Lo schermo intero non è supportato da questo browser.',
+      fullscreenError: 'Impossibile attivare lo schermo intero.',
+    },
+    topologySummary: {
+      title: 'Topologia di rete',
+      subtitle: 'Panoramica della tua infrastruttura.',
+      devices: 'Dispositivi',
+      subnets: 'Sottoreti',
+      online: 'Online',
+      lastScan: 'Ultima scansione',
+      never: 'Mai',
+      open: 'Apri la topologia',
+      loading: 'Caricamento dell’inventario…',
+      empty: 'Nessun dispositivo nell’inventario.',
     },
     kpi: {
       devices: 'Dispositivi rilevati', threats: 'Minacce bloccate', vulns: 'Vulnerabilità',

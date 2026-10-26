@@ -1,9 +1,6 @@
 import Donut from './Donut'
-import Topology from './Topology'
-import { KPIS, TYPES, STATUS, SEV, SLOTS } from '../constants'
+import { KPIS, STATUS, SEV } from '../constants'
 import { useI18n } from '../i18n/context.js'
-
-export { Topology }
 
 export function Banner() {
   const { t } = useI18n()
@@ -34,36 +31,6 @@ export function Kpis({ counts }) {
         )
       })}
     </section>
-  )
-}
-
-export function NetworkMap({ devices, onAdd }) {
-  const { t } = useI18n()
-  return (
-    <div className="card map">
-      <h3>{t('map.title')} <span className="live" style={{ color: 'var(--m)' }}>● {t('map.offline')}</span></h3>
-      <div className="legend">
-        {Object.entries(TYPES).map(([ty, c]) => <div key={ty}><i style={{ background: c }} />{t(`type.${ty}`)}</div>)}
-        <div><i style={{ background: 'var(--r)' }} />{t('map.threat')}</div>
-      </div>
-      <svg className="mapsvg" viewBox="0 0 600 340" preserveAspectRatio="xMidYMid slice">
-        <g style={{ fill: 'var(--map-land)', stroke: 'var(--map-stroke)', opacity: 'var(--map-opacity)' }}><path d="M150 200l120-70 150 70-120 80z" /><path d="M270 130l120-60 140 60-110 70z" /><path d="M220 270l110-60 120 60-110 55z" /></g>
-        {!devices.length && <text x="300" y="200" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="14">{t('map.noDevices')}</text>}
-        {devices.map((d, i) => {
-          const [x, y] = SLOTS[i % SLOTS.length]
-          const st = STATUS.find((s) => s.k === d.status)
-          return (
-            <g key={i}>
-              <title>{d.name} — {d.ip || '—'}</title>
-              <circle cx={x} cy={y} r="9" style={{ fill: TYPES[d.type], stroke: st?.color }} strokeWidth="2" />
-              <text x={x} y={y + 22} textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="9">{d.name}</text>
-            </g>
-          )
-        })}
-      </svg>
-      <div className="ctrl"><span style={{ cursor: 'pointer' }} title={t('map.addDevice')} onClick={onAdd}>+</span><span>◎</span><span>↻</span><span style={{ fontSize: 11 }}>3D</span></div>
-      <div className="site">📍 {t('map.site')}<br />—</div>
-    </div>
   )
 }
 

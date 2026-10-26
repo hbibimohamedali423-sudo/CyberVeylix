@@ -15,10 +15,14 @@ small,.m{color:var(--m);font-size:11px}
 .av{width:34px;height:34px;border-radius:50%;background:var(--c)}
 .bdg{background:var(--r);border-radius:9px;font-size:10px;padding:1px 6px;margin-inline-start:6px;box-shadow:var(--badge-shadow)}
 .wrap{display:grid;grid-template-columns:235px 1fr 285px;gap:18px;padding:18px 20px}
+.wrap.page-wide{grid-template-columns:235px minmax(0,1fr)}
 nav{display:flex;flex-direction:column;gap:4px}
-nav a{padding:12px 14px;border-radius:8px;color:var(--nav-text);cursor:pointer;display:flex;align-items:center;gap:12px}
-nav a i{width:18px;height:18px;border:2px solid var(--m);border-radius:5px}
-nav a.on{background:linear-gradient(90deg,var(--nav-active1),var(--nav-active2));color:var(--on-accent);font-weight:600;box-shadow:var(--nav-active-shadow)}nav a.on i{border-color:var(--on-accent)}
+nav button{width:100%;margin:0;padding:12px 14px;border:0;border-radius:8px;background:transparent;color:var(--nav-text);cursor:pointer;display:flex;align-items:center;gap:12px;font:inherit;text-align:start}
+nav button i{width:18px;height:18px;border:2px solid var(--m);border-radius:5px}
+nav button:not(.on):hover{background:var(--nav-hover);color:var(--t)}
+nav button:focus-visible{outline:2px solid var(--focus-color);outline-offset:2px}
+nav button.on{background:linear-gradient(90deg,var(--nav-active1),var(--nav-active2));color:var(--on-accent);font-weight:600;box-shadow:var(--nav-active-shadow)}
+nav button.on i{border-color:var(--on-accent)}
 .promo{margin-top:30px;text-align:center;padding:26px 12px;border:1px solid var(--card-border);border-radius:12px;background:var(--promo-bg);box-shadow:var(--shadow-card)}
 .shield{width:44px;height:50px;margin:0 auto 12px;border:3px solid var(--c);border-radius:6px 6px 22px 22px;box-shadow:var(--shield-shadow)}
 .promo b{display:block;font-weight:500;margin-bottom:10px}.promo span{color:var(--accent-ink);font-size:11px}
@@ -59,15 +63,15 @@ aside{display:grid;gap:14px;align-content:start}
 .rep{display:flex;gap:10px;align-items:center;padding:6px 0}.rep s{flex:none;text-decoration:none;font-size:8px;font-weight:700;background:var(--r);border-radius:4px;padding:6px 4px}
 footer{display:flex;justify-content:space-between;padding:14px 26px;background:var(--footer-bg);border-top:1px solid var(--card-border);color:var(--m);font-size:12px}
 .demo{text-align:center;font-size:10px;color:var(--m);padding-bottom:10px}
-@media(max-width:1100px){.wrap{grid-template-columns:1fr}.mid,.bot{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.search,.right small{display:none}nav{flex-direction:row;flex-wrap:wrap}nav a{padding:8px 10px}.promo{display:none}.banner{height:auto;padding:18px;flex-direction:column;align-items:flex-start;gap:12px}}
+@media(max-width:1100px){.wrap{grid-template-columns:1fr}.wrap.page-wide{grid-template-columns:1fr}.mid,.bot{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.search,.right small{display:none}nav{flex-direction:row;flex-wrap:wrap}nav button{width:auto;padding:8px 10px}.promo{display:none}.banner{height:auto;padding:18px;flex-direction:column;align-items:flex-start;gap:12px}}
 @media(max-width:560px){.kpis{grid-template-columns:1fr}.top{padding:10px 14px}.wrap{padding:12px}}
 dialog{background:var(--dialog-bg);color:var(--t);border:1px solid var(--card-border);border-radius:12px;padding:18px;width:min(420px,92vw);box-shadow:var(--shadow-panel)}dialog::backdrop{background:var(--overlay)}dialog h3{margin-bottom:12px}input,select,button{width:100%;margin:0 0 8px;padding:9px 10px;background:var(--input-bg);color:var(--t);border:1px solid var(--input-border);border-radius:6px;font:inherit}button{cursor:pointer;background:var(--primary);color:var(--on-accent);border:0;font-weight:600}button.x{width:auto;margin:0;padding:2px 8px;background:var(--surface2);color:var(--t)}.dl{max-height:150px;overflow:auto;margin-top:10px}.dl div{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--border-soft);font-size:12px}
 .ov{position:fixed;inset:0;background:var(--overlay);display:grid;place-items:center;z-index:50}.dlg{background:var(--dialog-bg);color:var(--t);border:1px solid var(--card-border);border-radius:12px;padding:18px;width:min(420px,92vw);box-shadow:var(--shadow-panel)}.dlg h3{margin-bottom:12px}.dlg .wide{width:100%;padding:9px}.mapsvg{position:absolute;inset:40px 0 0 0;width:100%;height:calc(100% - 40px)}
 :focus-visible{outline:2px solid var(--focus-color);outline-offset:2px}
 /* Thème clair : palette froide, surfaces plates et contrastes maîtrisés. Aucune règle ci-dessous n’affecte le thème sombre. */
 [data-theme="light"] .wrap>div:first-child{background:var(--sidebar-bg);border:1px solid var(--card-border);border-radius:12px;padding:14px 12px;box-shadow:var(--shadow-card);align-self:start}
-[data-theme="light"] nav a{transition:background .15s ease,color .15s ease}
-[data-theme="light"] nav a:not(.on):hover{background:var(--nav-hover);color:var(--t)}
+[data-theme="light"] nav button{transition:background .15s ease,color .15s ease}
+[data-theme="light"] nav button:not(.on):hover{background:var(--nav-hover);color:var(--t)}
 [data-theme="light"] .tg-btn{padding:8px 6px;margin-top:20px;transition:background .15s ease}
 [data-theme="light"] .tg-btn:hover{background:var(--nav-hover)}
 [data-theme="light"] .ctrl span:hover{background:var(--row-hover)}

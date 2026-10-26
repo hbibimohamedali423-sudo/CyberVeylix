@@ -115,8 +115,27 @@
 /* ── RTL: diagram geometry stays LTR, text around it follows dir ── */
 [dir="rtl"] .topo-svg{direction:ltr}
 
+/* ── Full page and Fullscreen API ── */
+.topology-page{min-width:0}
+.topology-page-bar{display:flex;align-items:center;justify-content:flex-end;min-height:38px}
+.topology-fs-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:auto;margin:0;padding:9px 13px;border:1px solid var(--border-soft);border-radius:9px;background:var(--surface);color:var(--t);font-size:12px;font-weight:600;line-height:1.2;box-shadow:var(--shadow-control)}
+.topology-fs-btn:hover{background:var(--surface-hover)}
+.topology-fs-btn:focus-visible{outline:2px solid var(--focus-color);outline-offset:2px}
+.topology-fs-btn:disabled{opacity:.55;cursor:not-allowed}
+.topology-fs-btn svg{flex:none}
+.topology-fs-note{margin:0;color:var(--m);font-size:12px;line-height:1.45}
+.topology-fs-error{margin:0;padding:9px 12px;border:1px solid color-mix(in srgb,var(--danger-ink) 35%,transparent);border-radius:9px;background:var(--danger-bg);color:var(--danger-ink);font-size:12px;line-height:1.4}
+.topology-page:fullscreen{padding:18px 20px;overflow:auto;background:var(--page-bg)}
+.topology-page:fullscreen .topology{min-height:0}
+.topology-page:fullscreen .topo-map{height:calc(100vh - 250px);min-height:320px}
+
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion:reduce){
-  .topo-leaf,.topo-leaf-bg,.topo-leaf-halo,.topo-rail button{transition:none}
+  .topo-leaf,.topo-leaf-bg,.topo-leaf-halo,.topo-rail button,.topology-fs-btn{transition:none}
   .topo-leaf:hover,.topo-leaf:focus-visible{transform:none}
+}
+
+@media (max-width:640px){
+  .topology-page:fullscreen{padding:12px}
+  .topology-fs-btn{width:100%}
 }

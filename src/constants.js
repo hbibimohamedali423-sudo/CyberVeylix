@@ -1,5 +1,5 @@
 // Codes de navigation : les libellés sont traduits à l’affichage (i18n).
-export const NAV = ['home', 'devices', 'scan', 'vulns', 'threats', 'soc', 'reports', 'map', 'team', 'settings']
+export const NAV = ['home', 'devices', 'topology', 'scan', 'vulns', 'threats', 'soc', 'reports', 'team', 'settings']
 export const KPIS = [
   { key: 'devices', cls: '' },
   { key: 'threats', cls: 'r' },
