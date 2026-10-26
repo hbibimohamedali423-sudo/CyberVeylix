@@ -3,12 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "test": "node scripts/csv-check.mjs && node scripts/i18n-check.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "agent:check": "node --env-file=agent/.env agent/scan.mjs --check"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

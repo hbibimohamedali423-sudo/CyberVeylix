@@ -129,7 +129,9 @@ const NO_ALERTS = args.includes('--no-alerts')
 
 const must = (r) => {
   if (r.error) {
-    const hint = /column|relation|schema/i.test(r.error.message) ? ' (avez-vous exécuté supabase/schema_scan.sql ?)' : ''
+    const hint = /column|relation|schema|constraint|conflict/i.test(r.error.message)
+      ? ' (avez-vous exécuté supabase/schema_scan.sql puis supabase/schema_hardening.sql ?)'
+      : ''
     die('Erreur base de données : ' + r.error.message + hint)
   }
   return r.data
@@ -167,6 +169,8 @@ if (CHECK) {
   console.log(d.error ? '✖ Table devices : ' + d.error.message : `Table devices : OK (${d.count} appareil(s))`)
   const v = await sb.from('services').select('id', { count: 'exact', head: true })
   console.log(v.error ? '✖ Table services : ' + v.error.message + ' (exécutez supabase/schema_scan.sql)' : 'Table services : OK')
+  const a = await sb.from('alerts').select('device_id', { count: 'exact', head: true })
+  console.log(a.error ? '✖ Table alerts : ' + a.error.message + ' (exécutez supabase/schema_hardening.sql)' : 'Table alerts (device_id) : OK')
   await sb.auth.signOut()
   process.exit(0)
 }
@@ -214,7 +218,10 @@ for (const h of alive) {
   let id
   let prev = []
   if (ex) {
-    must(await sb.from('devices').update({ status: 'on', mac: h.mac, last_seen: now }).eq('id', ex.id))
+    // La MAC n'est remplacée que si elle a été lue, pour ne pas effacer une valeur déjà connue.
+    must(await sb.from('devices')
+      .update({ status: 'on', last_seen: now, ...(h.mac ? { mac: h.mac } : {}) })
+      .eq('id', ex.id))
     id = ex.id
     prev = (must(await sb.from('services').select('port').eq('device_id', id)) || []).map((x) => x.port)
   } else {
@@ -222,19 +229,37 @@ for (const h of alive) {
       .insert({ name: h.name || h.ip, ip: h.ip, mac: h.mac, type: guessType(h.ports), status: 'on', last_seen: now })
       .select('id').single()).id
     if (!baseline) {
-      alerts.push({ title: 'Nouvel appareil détecté', detail: `${who}${h.mac ? ' (' + h.mac + ')' : ''}`, severity: 'm' })
+      alerts.push({
+        title: 'Nouvel appareil détecté',
+        detail: `${who}${h.mac ? ' (' + h.mac + ')' : ''}`,
+        severity: 'm',
+        device_id: id,
+      })
     }
   }
   if (!baseline) {
     for (const p of h.ports) {
       if (SENSITIVE[p] && !prev.includes(p)) {
-        alerts.push({ title: `Port ${p} ouvert (${SENSITIVE[p][1]})`, detail: who, severity: SENSITIVE[p][0] })
+        alerts.push({
+          title: `Port ${p} ouvert (${SENSITIVE[p][1]})`,
+          detail: who,
+          severity: SENSITIVE[p][0],
+          device_id: id,
+        })
       }
     }
   }
-  must(await sb.from('services').delete().eq('device_id', id))
+  // upsert (nécessite l'index unique services_device_port_uq), puis suppression des seuls ports fermés :
+  // une coupure en cours de route ne fait plus perdre toutes les données de l'appareil.
   if (h.ports.length) {
-    must(await sb.from('services').insert(h.ports.map((p) => ({ device_id: id, port: p, service: NAMES[p] }))))
+    must(await sb.from('services').upsert(
+      h.ports.map((p) => ({ device_id: id, port: p, protocol: 'tcp', service: NAMES[p] })),
+      { onConflict: 'device_id,port,protocol' },
+    ))
+  }
+  const closed = prev.filter((p) => !h.ports.includes(p))
+  if (closed.length) {
+    must(await sb.from('services').delete().eq('device_id', id).in('port', closed))
   }
 }
 
@@ -260,7 +285,7 @@ if (baseline) {
   console.log('    Premier inventaire : aucune alerte créée (référence de départ).')
 } else if (alerts.length && !NO_ALERTS) {
   const r = await sb.from('alerts').insert(alerts)
-  if (r.error) console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_alerts.sql ?)')
+  if (r.error) console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_hardening.sql ?)')
   else console.log(`    ${alerts.length} alerte(s) créée(s)`)
 } else {
   console.log('    Aucune nouvelle alerte.')
