@@ -38,7 +38,7 @@ function Dashboard({ user }) {
         <Sidebar active={page} onChange={setPage} />
         {page === 0 ? (<>
         <main className="main">
-          <Topology devices={dev.rows} services={srv.rows} />
+          <Topology devices={dev.rows} services={srv.rows} loaded={dev.loaded} />
           <Kpis counts={[dev.loaded ? dev.rows.length : null, thr.loaded ? thr.rows.filter((t) => t.blocked).length : null, vul.loaded ? vul.rows.filter((v) => (v.status || 'open') !== 'resolved').length : null, srv.loaded ? srv.rows.length : null]} />
           <section className="mid">
             <NetworkMap devices={dev.rows} onAdd={() => setModal('dev')} />
