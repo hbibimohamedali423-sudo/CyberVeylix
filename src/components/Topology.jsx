@@ -4,25 +4,32 @@ import { TYPES, SENSITIVE_PORTS } from '../constants.js'
 import './Topology.css'
 
 /* ── Geometry (graph units) ─────────────────────────────────────────────── */
-const LEAF_W = 148
-const LEAF_H = 76
+const LEAF_W = 196
+const LEAF_H = 96
 const GAP_X = 14
-const GAP_Y = 12
-const PER_ROW = 5
-const GUTTER = 26
-const COL_GAP = 56
-const MARGIN = 28
-const HEAD_H = 22
+const GAP_Y = 14
+const GUTTER = 28
+const COL_GAP = 48
+const MARGIN = 24
+const HEAD_H = 24
 const HEAD_GAP = 8
-const CLUSTER_GAP = 26
-const PILL_H = 48
-const INTERNET_W = 160
-const LAN_W = 176
-const UNKNOWN_W = 200
+const CLUSTER_GAP = 16
+const CLUSTER_COL_GAP = 20
+const PILL_H = 52
+const INTERNET_W = 176
+const LAN_W = 200
+const UNKNOWN_W = 220
 const INTERNET_Y = MARGIN
-const LAN_Y = INTERNET_Y + PILL_H + 76
-const CLUSTER_TOP = LAN_Y + PILL_H + 52
+const LAN_Y = INTERNET_Y + PILL_H + 40
+const CLUSTER_TOP = LAN_Y + PILL_H + 24
 const MIN_GRAPH_W = 360
+const FIT_PAD_X = 14
+const FIT_PAD_Y = 12
+const MAX_FIT_SCALE = 1.4
+// Both grids are tried and the best fit for the measured canvas is kept:
+// cards per row inside a type cluster, and type clusters side by side.
+const PER_ROW_OPTIONS = [1, 2, 3, 4, 5, 6]
+const CLUSTER_COL_OPTIONS = [1, 2, 3, 4]
 
 const TYPE_KEYS = Object.keys(TYPES)
 
@@ -101,11 +108,6 @@ function prefixOf(ip) {
   return `${octets[0]}.${octets[1]}.${octets[2]}`
 }
 
-const truncate = (value, max) => {
-  const str = String(value ?? '')
-  return str.length > max ? `${str.slice(0, max - 1)}…` : str
-}
-
 const isRecent = (value) => {
   if (!value) return false
   const ms = new Date(value).getTime()
@@ -120,12 +122,190 @@ const statusTone = (status) => {
   return 'var(--o)'
 }
 
+/* Approximate text metrics so long names wrap inside the card instead of
+   being cut, including wide (CJK/emoji) characters. */
+const charWidth = (ch, size) => {
+  const code = ch.codePointAt(0)
+  if (ch === ' ') return size * 0.32
+  const wide = code > 0xffff
+    || (code >= 0x1100 && code <= 0x115f)
+    || (code >= 0x2e80 && code <= 0x9fff)
+    || (code >= 0xac00 && code <= 0xd7a3)
+    || (code >= 0xf900 && code <= 0xfaff)
+    || (code >= 0xfe30 && code <= 0xfe4f)
+    || (code >= 0xff00 && code <= 0xff60)
+  return wide ? size : size * 0.55
+}
+
+const estimateTextWidth = (value, size) => {
+  let width = 0
+  for (const ch of String(value ?? '')) width += charWidth(ch, size)
+  return width
+}
+
+function wrapText(value, maxWidth, size = 13.5, maxLines = 2) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) return { lines: ['—'], truncated: false }
+  const lines = []
+  let rest = text
+  while (rest && lines.length < maxLines) {
+    if (estimateTextWidth(rest, size) <= maxWidth) {
+      lines.push(rest)
+      rest = ''
+      break
+    }
+    const chars = Array.from(rest)
+    let width = 0
+    let fit = 0
+    let lastSpace = -1
+    for (let i = 0; i < chars.length; i += 1) {
+      const w = charWidth(chars[i], size)
+      if (width + w > maxWidth) break
+      width += w
+      fit = i + 1
+      if (chars[i] === ' ') lastSpace = i
+    }
+    if (fit === 0) fit = 1
+    const cut = lastSpace > 0 ? lastSpace : fit
+    lines.push(chars.slice(0, cut).join('').trimEnd())
+    rest = chars.slice(cut).join('').trimStart()
+  }
+  const truncated = Boolean(rest)
+  if (rest) {
+    const last = lines[lines.length - 1] || ''
+    const budget = maxWidth - estimateTextWidth('…', size)
+    let width = 0
+    let out = ''
+    for (const ch of last) {
+      const w = charWidth(ch, size)
+      if (width + w > budget) break
+      width += w
+      out += ch
+    }
+    lines[lines.length - 1] = `${out.trimEnd()}…`
+  }
+  return { lines: lines.length ? lines : ['—'], truncated }
+}
+
 const zoomed = (view, factor, fit) => {
   const minW = fit.w * 0.2
   const maxW = fit.w * 2.4
   const w = Math.min(maxW, Math.max(minW, view.w * factor))
   const h = view.h * (w / view.w)
   return { x: view.x + (view.w - w) / 2, y: view.y + (view.h - h) / 2, w, h }
+}
+
+/* ── Graph construction ─────────────────────────────────────────────────── */
+function buildBaseNets(devices) {
+  const byPrefix = new Map()
+  const unknown = []
+  for (const d of devices) {
+    const prefix = prefixOf(d?.ip)
+    if (!prefix) {
+      unknown.push(d)
+      continue
+    }
+    const list = byPrefix.get(prefix)
+    if (list) list.push(d)
+    else byPrefix.set(prefix, [d])
+  }
+
+  const nets = [...byPrefix.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }))
+    .map(([prefix, list]) => ({ key: prefix, prefix, kind: 'net', devices: list }))
+
+  // Zero valid IPv4: keep one LAN node, labelled without a prefix.
+  if (!nets.length) nets.push({ key: '__lan', prefix: null, kind: 'net', devices: [] })
+  if (unknown.length) nets.push({ key: '__unknown', prefix: null, kind: 'unknown', devices: unknown })
+
+  for (const net of nets) {
+    const byType = new Map()
+    for (const d of net.devices) {
+      const key = Object.hasOwn(TYPES, d.type) ? d.type : '__other'
+      const list = byType.get(key)
+      if (list) list.push(d)
+      else byType.set(key, [d])
+    }
+    net.clusters = [...TYPE_KEYS, '__other']
+      .map((key) => ({
+        type: key,
+        devices: (byType.get(key) || []).slice()
+          .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+      }))
+      .filter((cluster) => cluster.devices.length)
+  }
+  return nets
+}
+
+function placeNets(baseNets, perRow, clusterCols) {
+  const nets = baseNets.map((base) => ({
+    ...base,
+    rows: [],
+    clusters: base.clusters.map((cluster) => ({
+      type: cluster.type,
+      devices: cluster.devices,
+      cards: [],
+    })),
+  }))
+
+  let cursor = MARGIN
+  let deepest = CLUSTER_TOP
+  for (const net of nets) {
+    net.left = cursor
+
+    // Measure every type block, then pack the blocks into cluster rows.
+    for (const cluster of net.clusters) {
+      const count = cluster.devices.length
+      const usedCols = Math.min(perRow, count)
+      const rows = Math.ceil(count / perRow)
+      cluster.gridW = usedCols * LEAF_W + Math.max(0, usedCols - 1) * GAP_X
+      cluster.gridH = rows * LEAF_H + Math.max(0, rows - 1) * GAP_Y
+      cluster.blockW = GUTTER + cluster.gridW + 8
+      cluster.blockH = HEAD_H + HEAD_GAP + cluster.gridH
+    }
+
+    const cols = net.clusters.length ? Math.min(clusterCols, net.clusters.length) : 1
+    const chunks = []
+    for (let i = 0; i < net.clusters.length; i += cols) chunks.push(net.clusters.slice(i, i + cols))
+    const rowWidths = chunks.map((chunk) => chunk.reduce((sum, cluster) => sum + cluster.blockW, 0)
+      + Math.max(0, chunk.length - 1) * CLUSTER_COL_GAP)
+    net.width = Math.max(LAN_W + 40, ...rowWidths)
+    net.center = net.left + net.width / 2
+    net.spineX = net.left + 8
+
+    let rowTop = CLUSTER_TOP
+    for (let r = 0; r < chunks.length; r += 1) {
+      const chunk = chunks[r]
+      const rowH = Math.max(...chunk.map((cluster) => cluster.blockH))
+      let x = net.left + (net.width - rowWidths[r]) / 2
+      for (const cluster of chunk) {
+        cluster.left = x
+        cluster.headY = rowTop
+        cluster.gridTop = rowTop + HEAD_H + HEAD_GAP
+        cluster.gridLeft = x + GUTTER
+        cluster.cards = cluster.devices.map((device, i) => ({
+          device,
+          x: cluster.gridLeft + (i % perRow) * (LEAF_W + GAP_X),
+          y: cluster.gridTop + Math.floor(i / perRow) * (LEAF_H + GAP_Y),
+        }))
+        x += cluster.blockW + CLUSTER_COL_GAP
+      }
+      net.rows.push({ busY: rowTop - 8, clusters: chunk })
+      rowTop += rowH + CLUSTER_GAP
+    }
+
+    net.bottom = net.clusters.length ? rowTop - CLUSTER_GAP : CLUSTER_TOP
+    deepest = Math.max(deepest, net.bottom)
+    cursor += net.width + COL_GAP
+  }
+
+  return {
+    nets,
+    perRow,
+    clusterCols,
+    totalW: Math.max(MIN_GRAPH_W, cursor - COL_GAP + MARGIN),
+    totalH: Math.max(260, deepest + MARGIN),
+  }
 }
 
 /* ── Component ─────────────────────────────────────────────────────────── */
@@ -136,8 +316,10 @@ export default function Topology({ devices = [], services = [], loaded = true })
   // `null` means "use the computed fit" so the graph follows the inventory
   // until the user pans or zooms.
   const [view, setView] = useState(null)
+  const [mapBox, setMapBox] = useState({ w: 0, h: 0 })
   const mapRef = useRef(null)
   const drag = useRef(null)
+  const hasMap = loaded && devices.length > 0
 
   const portsByDevice = useMemo(() => {
     const map = new Map()
@@ -150,86 +332,63 @@ export default function Topology({ devices = [], services = [], loaded = true })
     return map
   }, [services])
 
+  useEffect(() => {
+    if (!hasMap) return undefined
+    const el = mapRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const measure = () => {
+      const rect = el.getBoundingClientRect()
+      const w = Math.round(rect.width)
+      const h = Math.round(rect.height)
+      setMapBox((previous) => (previous.w === w && previous.h === h ? previous : { w, h }))
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMap])
+
   /* One valid /24 per distinct first-three-octets prefix. Devices without a
-     valid IPv4 go to a standalone "unknown address" group (no LAN claim). */
+     valid IPv4 go to a standalone "unknown address" group (no LAN claim).
+     The per-row count is picked so the fit zooms in as much as the canvas
+     allows instead of scaling readable text down to nothing. */
   const layout = useMemo(() => {
-    const byPrefix = new Map()
-    const unknown = []
-    for (const d of devices) {
-      const prefix = prefixOf(d?.ip)
-      if (!prefix) {
-        unknown.push(d)
-        continue
+    const base = buildBaseNets(devices)
+    const candidates = []
+    for (const perRow of PER_ROW_OPTIONS) {
+      for (const clusterCols of CLUSTER_COL_OPTIONS) {
+        candidates.push(placeNets(base, perRow, clusterCols))
       }
-      const list = byPrefix.get(prefix)
-      if (list) list.push(d)
-      else byPrefix.set(prefix, [d])
     }
-
-    const nets = [...byPrefix.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }))
-      .map(([prefix, list]) => ({ key: prefix, prefix, kind: 'net', devices: list }))
-
-    // Zero valid IPv4: keep one LAN node, labelled without a prefix.
-    if (!nets.length) nets.push({ key: '__lan', prefix: null, kind: 'net', devices: [] })
-    if (unknown.length) nets.push({ key: '__unknown', prefix: null, kind: 'unknown', devices: unknown })
-
-    for (const net of nets) {
-      const byType = new Map()
-      for (const d of net.devices) {
-        const key = Object.hasOwn(TYPES, d.type) ? d.type : '__other'
-        const list = byType.get(key)
-        if (list) list.push(d)
-        else byType.set(key, [d])
+    if (!mapBox.w || !mapBox.h) {
+      return candidates.find((candidate) => candidate.perRow === 3 && candidate.clusterCols === 2) ?? candidates[0]
+    }
+    let best = candidates[0]
+    let bestScale = -Infinity
+    for (const candidate of candidates) {
+      const scale = Math.min(
+        mapBox.w / (candidate.totalW + FIT_PAD_X * 2),
+        mapBox.h / (candidate.totalH + FIT_PAD_Y * 2),
+      )
+      if (scale > bestScale + 0.0001) {
+        best = candidate
+        bestScale = scale
       }
-      const clusters = [...TYPE_KEYS, '__other']
-        .map((key) => ({
-          type: key,
-          devices: (byType.get(key) || []).slice()
-            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
-        }))
-        .filter((cluster) => cluster.devices.length)
-
-      const widest = Math.max(1, ...clusters.map((c) => Math.min(PER_ROW, c.devices.length)))
-      const gridW = widest * LEAF_W + (widest - 1) * GAP_X
-      net.clusters = clusters
-      net.gridW = gridW
-      net.width = Math.max(gridW + GUTTER + 8, LAN_W + 40)
     }
+    return best
+  }, [devices, mapBox.w, mapBox.h])
 
-    let cursor = MARGIN
-    let deepest = CLUSTER_TOP
-    for (const net of nets) {
-      net.left = cursor
-      net.center = cursor + net.width / 2
-      net.gridLeft = cursor + GUTTER
-      let y = CLUSTER_TOP
-      for (const cluster of net.clusters) {
-        cluster.headY = y
-        cluster.gridTop = y + HEAD_H + HEAD_GAP
-        const rows = Math.ceil(cluster.devices.length / PER_ROW)
-        cluster.gridH = rows * LEAF_H + Math.max(0, rows - 1) * GAP_Y
-        cluster.cards = cluster.devices.map((device, i) => ({
-          device,
-          x: net.gridLeft + (i % PER_ROW) * (LEAF_W + GAP_X),
-          y: cluster.gridTop + Math.floor(i / PER_ROW) * (LEAF_H + GAP_Y),
-        }))
-        y = cluster.gridTop + cluster.gridH + CLUSTER_GAP
-      }
-      net.bottom = y - CLUSTER_GAP
-      deepest = Math.max(deepest, net.bottom)
-      cursor += net.width + COL_GAP
-    }
-
-    const totalW = Math.max(MIN_GRAPH_W, cursor - COL_GAP + MARGIN)
-    const totalH = Math.max(260, deepest + MARGIN)
-    return { nets, totalW, totalH }
-  }, [devices])
-
-  const fitView = useMemo(
-    () => ({ x: -26, y: -20, w: layout.totalW + 52, h: layout.totalH + 40 }),
-    [layout.totalW, layout.totalH],
-  )
+  const fitView = useMemo(() => {
+    const w0 = layout.totalW + FIT_PAD_X * 2
+    const h0 = layout.totalH + FIT_PAD_Y * 2
+    const base = { x: -FIT_PAD_X, y: -FIT_PAD_Y, w: w0, h: h0 }
+    if (!mapBox.w || !mapBox.h) return base
+    const scale = Math.min(mapBox.w / w0, mapBox.h / h0)
+    if (scale <= MAX_FIT_SCALE) return base
+    const k = scale / MAX_FIT_SCALE
+    const w = w0 * k
+    const h = h0 * k
+    return { x: layout.totalW / 2 - w / 2, y: layout.totalH / 2 - h / 2, w, h }
+  }, [layout.totalW, layout.totalH, mapBox.w, mapBox.h])
   const current = view ?? fitView
 
   /* Ctrl/Cmd + wheel zooms, plain wheel keeps the page scroll. */
@@ -391,7 +550,7 @@ export default function Topology({ devices = [], services = [], loaded = true })
             </div>
 
             <svg className="topo-svg" viewBox={`${current.x} ${current.y} ${current.w} ${current.h}`} preserveAspectRatio="xMidYMid meet">
-              {/* Membership edges only: Internet → LAN, LAN → type cluster. */}
+              {/* Membership edges only: Internet → LAN, LAN → cluster rows → cards. */}
               {visibleNets.map((net) => (
                 <path
                   key={`edge-net-${net.key}`}
@@ -399,30 +558,54 @@ export default function Topology({ devices = [], services = [], loaded = true })
                   d={`M ${internetCx} ${INTERNET_Y + PILL_H} C ${internetCx} ${LAN_Y - 42}, ${net.center} ${LAN_Y - 42}, ${net.center} ${LAN_Y}`}
                 />
               ))}
-              {layout.nets.map((net) => (
-                net.kind === 'net'
-                  ? net.clusters.map((cluster) => (
+              {layout.nets.map((net) => {
+                if (net.kind !== 'net' || !net.rows.length) return null
+                const spineX = net.spineX
+                const topY = LAN_Y + PILL_H
+                const endY = net.rows[net.rows.length - 1].busY
+                return (
+                  <g key={`net-tree-${net.key}`} className="topo-links" aria-hidden="true">
                     <path
-                      key={`edge-cluster-${net.key}-${cluster.type}`}
                       className="topo-edge"
-                      d={`M ${net.center} ${LAN_Y + PILL_H} C ${net.center} ${LAN_Y + PILL_H + 46}, ${net.left + 8} ${cluster.headY - 34}, ${net.left + 8} ${cluster.headY + 10}`}
+                      d={`M ${net.center} ${topY} C ${net.center} ${topY + 22}, ${spineX} ${topY + 12}, ${spineX} ${topY + 34} L ${spineX} ${endY}`}
                     />
-                  ))
-                  : null
-              ))}
+                    {net.rows.map((row, index) => {
+                      const last = row.clusters[row.clusters.length - 1]
+                      const busEndX = last.left + 8
+                      return (
+                        <g key={`net-row-${index}`}>
+                          {busEndX > spineX + 1 && (
+                            <path
+                              className="topo-edge"
+                              d={`M ${spineX} ${row.busY} C ${spineX + 12} ${row.busY}, ${busEndX - 12} ${row.busY}, ${busEndX} ${row.busY}`}
+                            />
+                          )}
+                          {row.clusters.map((cluster) => (
+                            <path
+                              key={`net-drop-${cluster.type}`}
+                              className="topo-edge"
+                              d={`M ${cluster.left + 8} ${row.busY} L ${cluster.left + 8} ${cluster.headY + 4}`}
+                            />
+                          ))}
+                        </g>
+                      )
+                    })}
+                  </g>
+                )
+              })}
 
               {/* Conceptual Internet node */}
               <g className="topo-pill is-internet">
                 <rect x={internetCx - INTERNET_W / 2} y={INTERNET_Y} width={INTERNET_W} height={PILL_H} rx="16" className="topo-pill-bg" />
-                <Glyph type="Accès Internet" x={internetCx - INTERNET_W / 2 + 18} y={INTERNET_Y + 15} size={18} />
-                <text x={internetCx - INTERNET_W / 2 + 44} y={INTERNET_Y + 22} className="topo-pill-title">{t('topology.internet')}</text>
-                <text x={internetCx - INTERNET_W / 2 + 44} y={INTERNET_Y + 35} className="topo-pill-meta">{t('topology.internetHint')}</text>
+                <Glyph type="Accès Internet" x={internetCx - INTERNET_W / 2 + 18} y={INTERNET_Y + 17} size={20} />
+                <text x={internetCx - INTERNET_W / 2 + 46} y={INTERNET_Y + 26} className="topo-pill-title">{t('topology.internet')}</text>
+                <text x={internetCx - INTERNET_W / 2 + 46} y={INTERNET_Y + 41} className="topo-pill-meta">{t('topology.internetHint')}</text>
               </g>
 
               {visibleNets.length > 1 && (
                 <g className="topo-netlabel-group">
-                  <rect x={internetCx - 78} y={LAN_Y - 36} width="156" height="24" rx="12" className="topo-netlabel-bg" />
-                  <text x={internetCx} y={LAN_Y - 20} textAnchor="middle" className="topo-netlabel">{t('topology.networksSeen')}</text>
+                  <rect x={internetCx - 84} y={LAN_Y - 30} width="168" height="24" rx="12" className="topo-netlabel-bg" />
+                  <text x={internetCx} y={LAN_Y - 14} textAnchor="middle" className="topo-netlabel">{t('topology.networksSeen')}</text>
                 </g>
               )}
 
@@ -430,11 +613,11 @@ export default function Topology({ devices = [], services = [], loaded = true })
               {layout.nets.filter((net) => net.kind === 'net').map((net) => (
                 <g key={`lan-${net.key}`} className="topo-pill is-lan">
                   <rect x={net.center - LAN_W / 2} y={LAN_Y} width={LAN_W} height={PILL_H} rx="16" className="topo-pill-bg" />
-                  <Glyph type="__lan" x={net.center - LAN_W / 2 + 16} y={LAN_Y + 15} size={18} />
-                  <text x={net.center - LAN_W / 2 + 42} y={LAN_Y + 22} className="topo-pill-title">
+                  <Glyph type="__lan" x={net.center - LAN_W / 2 + 18} y={LAN_Y + 17} size={20} />
+                  <text x={net.center - LAN_W / 2 + 46} y={LAN_Y + 26} className="topo-pill-title">
                     {net.prefix ? `${net.prefix}.0/24` : t('topology.lan')}
                   </text>
-                  <text x={net.center - LAN_W / 2 + 42} y={LAN_Y + 35} className="topo-pill-meta">
+                  <text x={net.center - LAN_W / 2 + 46} y={LAN_Y + 41} className="topo-pill-meta">
                     {net.devices.length} {deviceWord(net.devices.length)}
                   </text>
                 </g>
@@ -444,127 +627,213 @@ export default function Topology({ devices = [], services = [], loaded = true })
               {layout.nets.filter((net) => net.kind === 'unknown').map((net) => (
                 <g key={`unknown-${net.key}`} className="topo-pill is-unknown">
                   <rect x={net.center - UNKNOWN_W / 2} y={LAN_Y} width={UNKNOWN_W} height={PILL_H} rx="16" className="topo-pill-bg" />
-                  <Glyph type="__question" x={net.center - UNKNOWN_W / 2 + 16} y={LAN_Y + 15} size={18} />
-                  <text x={net.center - UNKNOWN_W / 2 + 42} y={LAN_Y + 22} className="topo-pill-title">{t('topology.lanUnknown')}</text>
-                  <text x={net.center - UNKNOWN_W / 2 + 42} y={LAN_Y + 35} className="topo-pill-meta">
+                  <Glyph type="__question" x={net.center - UNKNOWN_W / 2 + 18} y={LAN_Y + 17} size={20} />
+                  <text x={net.center - UNKNOWN_W / 2 + 46} y={LAN_Y + 26} className="topo-pill-title">{t('topology.lanUnknown')}</text>
+                  <text x={net.center - UNKNOWN_W / 2 + 46} y={LAN_Y + 41} className="topo-pill-meta">
                     {net.devices.length} {deviceWord(net.devices.length)}
                   </text>
                 </g>
               ))}
 
-              {/* Cluster headings + device cards */}
-              {layout.nets.map((net) => net.clusters.map((cluster) => (
-                <g key={`cluster-${net.key}-${cluster.type}`}>
-                  <rect
-                    x={net.left + 6} y={cluster.headY + 4} width="3" height="12" rx="1.5"
-                    fill={TYPES[cluster.type] || 'var(--m)'}
-                  />
-                  <text x={net.left + 16} y={cluster.headY + 13} className="topo-cluster">
-                    {typeLabel(cluster.type)}
-                    <tspan className="topo-cluster-count"> · {cluster.devices.length}</tspan>
-                  </text>
+              {/* Cluster headings, cluster→card membership lines, device cards */}
+              {layout.nets.map((net) => net.clusters.map((cluster) => {
+                const spineX = cluster.left + 8
+                const rows = []
+                for (const card of cluster.cards) {
+                  const index = Math.round((card.y - cluster.gridTop) / (LEAF_H + GAP_Y))
+                  if (!rows[index]) rows[index] = []
+                  rows[index].push(card)
+                }
+                const lastRow = rows[rows.length - 1]
+                const spineStart = cluster.headY + 10
+                const spineEnd = lastRow[0].y - 7
+                const spineStep = (spineEnd - spineStart) / 3
 
-                  {cluster.cards.map(({ device: d, x, y }) => {
-                    const rawName = String(d.name ?? '').trim()
-                    const ip = String(d.ip ?? '').trim()
-                    const sameAsIp = ip && rawName === ip
-                    const title = rawName || ip || '—'
-                    const subtitle = sameAsIp ? typeLabel(d.type) : (ip || '—')
-                    const ports = portsByDevice.get(d.id) || []
-                    const portCount = ports.length
-                    const sensitiveCount = ports.filter((s) => SENSITIVE_PORTS.includes(Number(s.port))).length
-                    const recent = isRecent(d.created_at)
-                    const label = statusLabel(d.status)
-                    const isSelected = selected === d.id
-                    const offline = d.status === 'off'
+                return (
+                  <g key={`cluster-${net.key}-${cluster.type}`}>
+                    <rect
+                      x={cluster.left + 6} y={cluster.headY + 4} width="3" height="14" rx="1.5"
+                      fill={TYPES[cluster.type] || 'var(--m)'}
+                    />
+                    <text x={cluster.left + 16} y={cluster.headY + 14} className="topo-cluster">
+                      {typeLabel(cluster.type)}
+                      <tspan className="topo-cluster-count"> · {cluster.devices.length}</tspan>
+                    </text>
 
-                    const chips = []
-                    let chipX = x + 9
-                    if (portCount > 0) {
-                      const width = 22 + String(portCount).length * 5
-                      chips.push({ key: 'ports', kind: 'ports', text: String(portCount), width, x: chipX })
-                      chipX += width + 4
-                    }
-                    if (sensitiveCount > 0) {
-                      const width = 22 + String(sensitiveCount).length * 5
-                      chips.push({ key: 'sens', kind: 'sens', text: String(sensitiveCount), width, x: chipX })
-                      chipX += width + 4
-                    }
-                    if (recent) {
-                      const text = t('topology.newBadge')
-                      const width = 12 + text.length * 4.6
-                      chips.push({ key: 'new', kind: 'new', text, width: Math.round(width), x: chipX })
-                    }
-
-                    return (
-                      <g
-                        key={d.id}
-                        className={`topo-leaf${offline ? ' is-off' : ''}${isSelected ? ' is-sel' : ''}`}
-                        role="button"
-                        tabIndex={0}
-                        aria-pressed={isSelected}
-                        aria-label={`${title}, ${ip || '—'}, ${typeLabel(d.type)}, ${label}, ${portCount} ${portWord(portCount)}`}
-                        style={{ '--tc': TYPES[d.type] || 'var(--m)' }}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          setSelected((previous) => (previous === d.id ? null : d.id))
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return
-                          event.preventDefault()
-                          event.stopPropagation()
-                          setSelected((previous) => (previous === d.id ? null : d.id))
-                        }}
-                      >
-                        <title>{`${title} — ${ip || '—'}`}</title>
-                        <rect x={x - 2} y={y - 2} width={LEAF_W + 4} height={LEAF_H + 4} rx="14" className="topo-leaf-halo" />
-                        <rect x={x} y={y} width={LEAF_W} height={LEAF_H} rx="12" className="topo-leaf-bg" />
-                        <rect x={x + 9} y={y + 9} width="26" height="26" rx="8" className="topo-leaf-icon-bg" />
-                        <Glyph type={Object.hasOwn(TYPES, d.type) ? d.type : '__other'} x={x + 14} y={y + 14} size={16} />
-                        <text x={x + 42} y={y + 21} className="topo-leaf-name">{truncate(title, 10)}</text>
-                        <circle cx={x + LEAF_W - 13} cy={y + 13} r="3.4" fill={statusTone(d.status)} />
-                        <text x={x + LEAF_W - 9} y={y + 27} textAnchor="end" className="topo-leaf-status">{label}</text>
-                        <text x={x + 42} y={y + 37} className="topo-leaf-ip">{truncate(subtitle, 16)}</text>
-
-                        {chips.map((chip) => (
-                          <g key={chip.key} className={`topo-chip is-${chip.kind}`} transform={`translate(${chip.x},${y + 52})`}>
-                            <title>
-                              {chip.kind === 'sens'
-                                ? t('topology.sensitivePorts', { n: sensitiveCount })
-                                : chip.kind === 'ports'
-                                  ? t('topology.openPorts', { n: portCount })
-                                  : t('topology.newBadge')}
-                            </title>
-                            <rect width={chip.width} height="13" rx="6.5" />
-                            {chip.kind === 'ports' && (
-                              <svg x="5" y="2.5" width="8" height="8" viewBox="0 0 12 12" fill="none"
-                                stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" aria-hidden="true">
-                                <rect x="1.5" y="3" width="9" height="6" rx="1" />
-                                <path d="M4 6h.01M6 6h.01M8 6h.01" />
-                              </svg>
-                            )}
-                            {chip.kind === 'sens' && (
-                              <svg x="5" y="2.5" width="8" height="8" viewBox="0 0 12 12" fill="none"
-                                stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M6 1.5 11 10.5H1z" />
-                                <path d="M6 5v2.5M6 9h.01" />
-                              </svg>
-                            )}
-                            <text
-                              x={chip.kind === 'new' ? chip.width / 2 : 16}
-                              y="9.4"
-                              textAnchor={chip.kind === 'new' ? 'middle' : 'start'}
-                            >
-                              {chip.text}
-                            </text>
-                          </g>
-                        ))}
+                    {cluster.cards.length > 0 && (
+                      <g className="topo-links" aria-hidden="true">
+                        {/* Cluster spine, then a bus above each row and a drop into each card. */}
+                        <path
+                          className="topo-edge"
+                          d={`M ${spineX} ${spineStart} C ${spineX} ${spineStart + spineStep}, ${spineX} ${spineEnd - spineStep}, ${spineX} ${spineEnd}`}
+                        />
+                        {rows.map((row, rowIndex) => {
+                          const busY = row[0].y - 7
+                          const firstCx = row[0].x + LEAF_W / 2
+                          const lastCx = row[row.length - 1].x + LEAF_W / 2
+                          return (
+                            <g key={`row-${rowIndex}`}>
+                              <path
+                                className="topo-edge"
+                                d={`M ${spineX} ${busY} C ${spineX + 12} ${busY}, ${firstCx - 12} ${busY}, ${firstCx} ${busY}`}
+                              />
+                              {row.length > 1 && (
+                                <path
+                                  className="topo-edge"
+                                  d={`M ${firstCx} ${busY} C ${firstCx + 12} ${busY}, ${lastCx - 12} ${busY}, ${lastCx} ${busY}`}
+                                />
+                              )}
+                              {row.map(({ device, x, y }) => {
+                                const cx = x + LEAF_W / 2
+                                return (
+                                  <path
+                                    key={`drop-${device.id}`}
+                                    className="topo-edge"
+                                    d={`M ${cx} ${busY} C ${cx} ${busY + 3}, ${cx} ${y - 3}, ${cx} ${y}`}
+                                  />
+                                )
+                              })}
+                            </g>
+                          )
+                        })}
                       </g>
-                    )
-                  })}
-                </g>
-              )))}
+                    )}
+
+                    {cluster.cards.map(({ device: d, x, y }) => {
+                      const rawName = String(d.name ?? '').trim()
+                      const ip = String(d.ip ?? '').trim()
+                      const ipMatchesName = Boolean(ip) && rawName === ip
+                      const displayName = rawName || ip || '—'
+                      let secondary = ip || '—'
+                      if (!ip || ipMatchesName) secondary = typeLabel(d.type)
+                      const nameWidth = LEAF_W - 58
+                      let nameFit = wrapText(displayName, nameWidth, 13.5, 2)
+                      let nameSize = 13.5
+                      if (nameFit.truncated) {
+                        for (const size of [12.5, 11.5, 11, 10.5]) {
+                          const next = wrapText(displayName, nameWidth, size, 2)
+                          if (!next.truncated) {
+                            nameFit = next
+                            nameSize = size
+                            break
+                          }
+                        }
+                      }
+                      const nameTop = nameFit.lines.length > 1 ? y + 24 : y + 33
+                      const nameStep = nameSize < 13 ? 16 : 17
+                      const ports = portsByDevice.get(d.id) || []
+                      const portCount = ports.length
+                      const sensitiveCount = ports.filter((s) => SENSITIVE_PORTS.includes(Number(s.port))).length
+                      const recent = isRecent(d.created_at)
+                      const label = statusLabel(d.status)
+                      const isSelected = selected === d.id
+                      const offline = d.status === 'off'
+
+                      const chipItems = []
+                      if (portCount > 0) {
+                        chipItems.push({ key: 'ports', kind: 'ports', text: String(portCount), width: 24 + String(portCount).length * 5.5 })
+                      }
+                      if (sensitiveCount > 0) {
+                        chipItems.push({ key: 'sens', kind: 'sens', text: String(sensitiveCount), width: 24 + String(sensitiveCount).length * 5.5 })
+                      }
+                      if (recent) {
+                        const text = t('topology.newBadge')
+                        chipItems.push({ key: 'new', kind: 'new', text, width: 14 + text.length * 5.4 })
+                      }
+                      // Keep the status text readable: if the bottom row is too
+                      // tight, drop the least important chip (the real count is
+                      // still in the accessible label and in the table).
+                      const chipGap = 4
+                      const totalWidth = (list) => list.reduce((sum, chip) => sum + chip.width, 0)
+                        + Math.max(0, list.length - 1) * chipGap
+                      const statusEnd = x + 21 + estimateTextWidth(label, 10.5)
+                      const chipBudget = x + LEAF_W - 10 - (statusEnd + 6)
+                      while (chipItems.length > 1 && totalWidth(chipItems) > chipBudget) {
+                        const index = chipItems.findIndex((chip) => chip.kind === 'ports')
+                        if (index < 0) break
+                        chipItems.splice(index, 1)
+                      }
+                      let chipX = x + LEAF_W - 10 - totalWidth(chipItems)
+                      const chips = chipItems.map((chip) => {
+                        const positioned = { ...chip, x: chipX }
+                        chipX += chip.width + chipGap
+                        return positioned
+                      })
+
+                      return (
+                        <g
+                          key={d.id}
+                          className={`topo-leaf${offline ? ' is-off' : ''}${isSelected ? ' is-sel' : ''}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={isSelected}
+                          aria-label={`${displayName}, ${ip || '—'}, ${typeLabel(d.type)}, ${label}, ${portCount} ${portWord(portCount)}`}
+                          style={{ '--tc': TYPES[d.type] || 'var(--m)' }}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setSelected((previous) => (previous === d.id ? null : d.id))
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setSelected((previous) => (previous === d.id ? null : d.id))
+                          }}
+                        >
+                          <title>{`${rawName || ip || '—'} — ${ip || '—'}`}</title>
+                          <rect x={x - 2} y={y - 2} width={LEAF_W + 4} height={LEAF_H + 4} rx="16" className="topo-leaf-halo" />
+                          <rect x={x} y={y} width={LEAF_W} height={LEAF_H} rx="14" className="topo-leaf-bg" />
+                          <rect x={x + 10} y={y + 10} width="28" height="28" rx="9" className="topo-leaf-icon-bg" />
+                          <Glyph type={Object.hasOwn(TYPES, d.type) ? d.type : '__other'} x={x + 15.5} y={y + 15.5} size={17} />
+                          <text x={x + 46} y={nameTop} className="topo-leaf-name" style={{ fontSize: nameSize }}>
+                            {nameFit.lines.map((line, index) => (
+                              <tspan key={index} x={x + 46} y={nameTop + index * nameStep}>{line}</tspan>
+                            ))}
+                          </text>
+                          <text x={x + 10} y={y + 63} className="topo-leaf-ip">{secondary}</text>
+                          <circle cx={x + 13} cy={y + 80} r="3.6" fill={statusTone(d.status)} />
+                          <text x={x + 21} y={y + 84} className="topo-leaf-status">{label}</text>
+
+                          {chips.map((chip) => (
+                            <g key={chip.key} className={`topo-chip is-${chip.kind}`} transform={`translate(${chip.x},${y + 74})`}>
+                              <title>
+                                {chip.kind === 'sens'
+                                  ? t('topology.sensitivePorts', { n: sensitiveCount })
+                                  : chip.kind === 'ports'
+                                    ? t('topology.openPorts', { n: portCount })
+                                    : t('topology.newBadge')}
+                              </title>
+                              <rect width={chip.width} height="15" rx="7.5" />
+                              {chip.kind === 'ports' && (
+                                <svg x="5" y="3" width="9" height="9" viewBox="0 0 12 12" fill="none"
+                                  stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" aria-hidden="true">
+                                  <rect x="1.5" y="3" width="9" height="6" rx="1" />
+                                  <path d="M4 6h.01M6 6h.01M8 6h.01" />
+                                </svg>
+                              )}
+                              {chip.kind === 'sens' && (
+                                <svg x="5" y="3" width="9" height="9" viewBox="0 0 12 12" fill="none"
+                                  stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M6 1.5 11 10.5H1z" />
+                                  <path d="M6 5v2.5M6 9h.01" />
+                                </svg>
+                              )}
+                              <text
+                                x={chip.kind === 'new' ? chip.width / 2 : 17}
+                                y="10.7"
+                                textAnchor={chip.kind === 'new' ? 'middle' : 'start'}
+                              >
+                                {chip.text}
+                              </text>
+                            </g>
+                          ))}
+                        </g>
+                      )
+                    })}
+                  </g>
+                )
+              }))}
             </svg>
           </div>
 

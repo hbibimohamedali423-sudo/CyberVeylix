@@ -15,7 +15,7 @@
 .topo-note svg{flex:none;margin-block-start:1px;color:var(--accent-ink)}
 
 /* ── Canvas ── */
-.topo-map{position:relative;height:clamp(420px,60vh,720px);border:1px solid var(--border-soft);border-radius:14px;overflow:hidden;background-color:var(--input-bg);background-image:radial-gradient(circle,color-mix(in srgb,var(--m) 18%,transparent) 1px,transparent 1.2px);background-size:18px 18px;cursor:grab;touch-action:none}
+.topo-map{position:relative;height:clamp(460px,64vh,760px);border:1px solid var(--border-soft);border-radius:14px;overflow:hidden;background-color:var(--input-bg);background-image:radial-gradient(circle,color-mix(in srgb,var(--m) 18%,transparent) 1px,transparent 1.2px);background-size:18px 18px;cursor:grab;touch-action:none}
 .topo-map.is-drag{cursor:grabbing}
 .topo-map:focus-visible{outline:2px solid var(--focus-color);outline-offset:-2px}
 .topo-svg{display:block;width:100%;height:100%;font-family:inherit;direction:ltr}
@@ -30,19 +30,20 @@
 
 /* ── Membership edges ── */
 .topo-edge{fill:none;stroke:var(--accent-ink);stroke-width:1.5;stroke-linecap:round;opacity:.3;vector-effect:non-scaling-stroke}
+.topo-links{pointer-events:none}
 
 /* ── Internet / LAN pills ── */
 .topo-pill{color:var(--accent-ink)}
 .topo-pill.is-unknown{color:var(--m)}
 .topo-pill-bg{fill:var(--input-bg);stroke:var(--border-soft);stroke-width:1}
 .topo-pill.is-internet .topo-pill-bg{stroke:color-mix(in srgb,var(--accent-ink) 38%,var(--border-soft))}
-.topo-pill-title{fill:var(--t);font-size:12.5px;font-weight:650}
-.topo-pill-meta{fill:var(--m);font-size:8.5px}
+.topo-pill-title{fill:var(--t);font-size:14px;font-weight:650}
+.topo-pill-meta{fill:var(--m);font-size:10.5px}
 .topo-netlabel-bg{fill:var(--input-bg);stroke:var(--border-soft);stroke-width:1}
-.topo-netlabel{fill:var(--m);font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.topo-netlabel{fill:var(--m);font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
 
 /* ── Type cluster headings ── */
-.topo-cluster{fill:var(--m);font-size:10px;font-weight:650;letter-spacing:.06em;text-transform:uppercase}
+.topo-cluster{fill:var(--m);font-size:11.5px;font-weight:650;letter-spacing:.06em;text-transform:uppercase}
 .topo-cluster-count{fill:var(--m);font-weight:500;opacity:.7}
 
 /* ── Device cards ── */
@@ -58,13 +59,13 @@
 .topo-leaf.is-sel .topo-leaf-bg{stroke:var(--accent-ink);stroke-width:1.5}
 .topo-leaf.is-sel .topo-leaf-halo{opacity:.15}
 .topo-leaf-icon-bg{fill:color-mix(in srgb,var(--tc) 13%,transparent);stroke:color-mix(in srgb,var(--tc) 28%,transparent);stroke-width:.8}
-.topo-leaf-name{fill:var(--t);font-size:11.5px;font-weight:600}
-.topo-leaf-ip{fill:var(--m);font-size:9.5px}
-.topo-leaf-status{fill:var(--m);font-size:8px;font-weight:500}
+.topo-leaf-name{fill:var(--t);font-size:13.5px;font-weight:600}
+.topo-leaf-ip{fill:var(--m);font-size:12px}
+.topo-leaf-status{fill:var(--m);font-size:10.5px;font-weight:500}
 
 /* ── Chips ── */
 .topo-chip rect{fill:var(--surface);stroke:var(--border-soft);stroke-width:.8}
-.topo-chip text{fill:var(--m);font-size:8px;font-weight:600}
+.topo-chip text{fill:var(--m);font-size:10px;font-weight:600}
 .topo-chip svg{color:var(--m)}
 .topo-chip.is-sens rect{fill:color-mix(in srgb,var(--o) 14%,transparent);stroke:color-mix(in srgb,var(--o) 34%,transparent)}
 .topo-chip.is-sens text{fill:var(--warning-ink)}

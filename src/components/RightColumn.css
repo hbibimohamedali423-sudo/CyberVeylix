@@ -1,2 +1,13 @@
 /* Compteur d’alertes ouvertes, limité à la carte d’alertes (aucun autre composant affecté). */
 .alerts-card .alert-badge{display:inline-block;background:var(--r);color:var(--on-danger);border-radius:9px;font-size:10px;line-height:1.4;padding:1px 6px;margin-inline-start:6px;vertical-align:middle;box-shadow:var(--badge-shadow)}
+
+/* Alerte : petit repère fixe + mot de gravité, le titre garde toute la largeur. */
+.alerts-card .alert-row{align-items:flex-start;gap:10px;inline-size:100%}
+.alerts-card .sev-mark{flex:none;inline-size:10px;block-size:10px;margin-block-start:4px;border-radius:50%;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 14%,transparent)}
+.alerts-card .alert-body{flex:1;min-width:0}
+.alerts-card .alert-meta{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-block-end:1px}
+.alerts-card .alert-sev{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.alerts-card .alert-meta small{flex:none;font-size:10px;color:var(--m);white-space:nowrap}
+.alerts-card .alert-body b{display:block;font-weight:550;line-height:1.35;color:var(--t);overflow-wrap:anywhere}
+.alerts-card .alert-body > small{display:block;margin-block-start:2px;font-size:11px;line-height:1.4;color:var(--m);overflow-wrap:anywhere}
+.alerts-card .alert-ack{display:block;margin-block-start:2px;color:var(--warning-ink);font-size:10.5px}
