@@ -15,6 +15,7 @@ import VulnsPage from './components/VulnsPage'
 import InstallPage from './components/InstallPage'
 import SensorCard from './components/SensorCard'
 import ReportPage from './components/ReportPage'
+import ScanPage from './components/ScanPage'
 import { isMissingTableMessage } from './lib/findings.js'
 import { TYPES, STATUS, SEV, CATS } from './constants'
 import { useI18n } from './i18n/context.js'
@@ -98,6 +99,10 @@ function Dashboard({ user }) {
           <main className="main wide">
             <SensorCard sensors={sen.rows} loaded={sen.loaded} missing={sensorsMissing} />
             <InstallPage />
+          </main>
+        ) : page === 'scan' ? (
+          <main className="main wide">
+            <ScanPage user={user} sensors={sen.rows} vulns={vul.rows} sensorsMissing={sensorsMissing} onOpenVulns={() => setPage('vulns')} />
           </main>
         ) : page === 'reports' ? (
           <main className="main wide">

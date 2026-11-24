@@ -85,6 +85,16 @@ Depuis un autre appareil du réseau local : `http://<nom du PC>:8710`.
 - Nécessite l'envoi au tableau de bord (`-Push` / compte renseigné à l'installation).
 - À la main : `node listener.mjs --yes --ui [--ui-port=8710] [--ui-local]`.
 
+## Demandes de la page web
+Avec l'envoi au tableau de bord (`--push`), le capteur consulte toutes les 5 s la table `sensor_commands`.
+La page « Analyse & Scan » y dépose une demande ; le capteur la réclame (une seule fois), l'exécute lui-même
+et écrit le résultat. Le navigateur n'exécute jamais rien sur le réseau.
+- **Liste blanche** : seule « Analyser maintenant » (`scan_now`) est active dans cette version ; tout autre type
+  (blocage, correction) est refusé explicitement (« non pris en charge »).
+- Une demande de plus de 15 minutes n'est pas exécutée (le capteur était éteint) ; une demande « en cours » lors
+  d'un redémarrage est marquée en échec.
+- Ne vise que les appareils déjà connus du capteur, réseaux privés uniquement (comme l'analyse périodique).
+
 ## Ce qu'il ne fait pas
 - Il ne bloque rien et n'isole aucun appareil (les leurres observent, ils ne ripostent pas).
 - Il ne voit que le trafic **diffusé** (ARP, DHCP) : il ne voit pas la navigation des autres appareils.

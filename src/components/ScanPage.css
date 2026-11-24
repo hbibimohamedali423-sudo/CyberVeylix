@@ -1,0 +1,18 @@
+.scan-page .scan-bar{display:flex;flex-wrap:wrap;gap:14px;align-items:end;margin:14px 0 6px}
+.scan-page .scan-bar label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--m)}
+.scan-page .scan-bar select{width:220px;margin:0}
+.scan-page .scan-bar button{width:auto;margin:0;padding:10px 20px}
+.scan-page button:disabled{opacity:.55;cursor:not-allowed}
+.scan-page .scan-hint{color:var(--warning-ink);font-size:12px;margin:6px 0}
+.scan-page .scan-err{color:var(--danger-ink);margin:6px 0;font-size:12px}
+.scan-page h4{margin:22px 0 10px;font-size:14px}
+.scan-page .scan-sev{list-style:none;display:flex;flex-wrap:wrap;gap:18px;margin:0 0 12px;padding:0}
+.scan-page .scan-sev b{font-size:20px}
+.scan-page button.ghost{background:var(--surface2);color:var(--t);width:auto;margin:0;padding:6px 12px}
+.scan-page .scan-tw{overflow-x:auto}
+.scan-page .scan-dt{width:100%;border-collapse:collapse;font-size:13px}
+.scan-page .scan-dt th{text-align:start;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b);white-space:nowrap}
+.scan-page .scan-dt td,.scan-page .scan-dt td:not(:first-child){text-align:start;color:var(--t);padding:8px;border-bottom:1px solid var(--row-border);vertical-align:top}
+.scan-page .scan-dt td.st-pending,.scan-page .scan-dt td.st-running{color:var(--warning-ink)}
+.scan-page .scan-dt td.st-done{color:var(--success-ink)}
+.scan-page .scan-dt td.st-failed,.scan-page .scan-dt td.st-rejected{color:var(--danger-ink)}

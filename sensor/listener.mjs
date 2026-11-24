@@ -26,6 +26,7 @@ import { runVulnScan } from './lib/vuln/run.mjs'
 import { countBySeverity } from './lib/vuln/report.mjs'
 import { connectSupabase, createPusher } from './lib/push.mjs'
 import { startWebServer } from './lib/web-server.mjs'
+import { createCommandRunner } from './lib/commands.mjs'
 
 const require = createRequire(import.meta.url)
 const run = promisify(execFile)
@@ -250,13 +251,14 @@ cap.on('packet', (nbytes) => {
 // Cibles : les appareils appris par le capteur (jamais le PC du capteur lui-même), réseaux privés seulement.
 const sensorIp = interfaceIpv4(device)
 let vulnRunning = false
+// Renvoie un résultat { code, ... } (affiché dans la page pour les demandes « Analyser maintenant »).
 async function vulnScanOnce() {
-  if (vulnRunning) return // une analyse à la fois
+  if (vulnRunning) return { code: 'busy' } // une analyse à la fois
   vulnRunning = true
   try {
     const targets = [...new Set(detectors.snapshot().bindings.map((b) => b.ip))]
       .filter((ip) => isPrivateIpv4(ip) && ip !== sensorIp)
-    if (!targets.length) { console.log('Analyse de vulnérabilités : aucun appareil connu pour l\'instant.'); return }
+    if (!targets.length) { console.log('Analyse de vulnérabilités : aucun appareil connu pour l\'instant.'); return { code: 'no_devices' } }
     console.log(`Analyse de vulnérabilités de ${targets.length} appareil(s)…`)
     const r = await runVulnScan({ targets, dataDir: DATA, client: config.client || '' })
     const n = countBySeverity(r.report.findings)
@@ -271,9 +273,12 @@ async function vulnScanOnce() {
         await p.syncVulnerabilities({ findings: r.report.findings, fixed: r.fixed })
       })
       heartbeat()
+      await pushQueue // résultats écrits dans la base avant d'annoncer « terminé »
     }
+    return { code: 'scan_done', hosts: targets.length, findings: r.report.findings.length, ...n }
   } catch (e) {
     console.log('⚠ Analyse de vulnérabilités impossible : ' + e.message)
+    return { code: 'error', failed: true, message: String(e.message).slice(0, 300) }
   } finally {
     vulnRunning = false
   }
@@ -320,6 +325,20 @@ if (opts.ui) {
       .then((s) => console.log(`✔ Interface web : http://${hostname()}:${s.port}${opts.uiLan ? ' (réseau local)' : ' (ce PC seulement)'}`))
       .catch((e) => console.log(`⚠ Interface web non démarrée (port ${opts.uiPort}) : ${e.message}`))
   }
+}
+
+// Demandes de la page web (table sensor_commands) : « Analyser maintenant ». Liste blanche de gestionnaires ;
+// tout autre type reçoit un refus explicite (les blocages et corrections arrivent dans une version ultérieure).
+if (opts.push) {
+  pusher().then((p) => {
+    if (!p) return
+    createCommandRunner({
+      client: p.client,
+      sensorName: hostname(),
+      handlers: { scan_now: () => vulnScanOnce() },
+    }).start()
+    console.log('Commandes de la page web : à l\'écoute (toutes les 5 s).')
+  })
 }
 
 // Pouls toutes les 5 minutes : l'application affiche « en service » ou « arrêté depuis… ».

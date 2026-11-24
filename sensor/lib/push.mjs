@@ -195,5 +195,5 @@ export function createPusher(client, { gatewayMac = null, log = console.log, now
     }
   }
 
-  return { pushAlerts, syncVulnerabilities, syncServices, heartbeat, get r1() { return r1 } }
+  return { pushAlerts, syncVulnerabilities, syncServices, heartbeat, client, get r1() { return r1 } }
 }

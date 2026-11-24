@@ -22,3 +22,17 @@ export function sensorState(sensor, now = Date.now()) {
 
 // Table absente (schema_r1_results.sql pas encore exécuté) : message PostgREST correspondant.
 export const isMissingTableMessage = (msg) => /could not find the table|relation .* does not exist|schema cache/i.test(msg || '')
+
+// Résultat d'une commande du capteur : JSON { code, ... } écrit par sensor/lib/commands.mjs.
+// Texte non JSON (ancienne version, saisie à la main) : code « raw », affiché tel quel.
+export function parseCommandResult(text) {
+  if (text === null || text === undefined || text === '') return null
+  try {
+    const v = JSON.parse(text)
+    if (v && typeof v === 'object' && !Array.isArray(v) && typeof v.code === 'string') return v
+  } catch { /* texte libre */ }
+  return { code: 'raw', message: String(text).slice(0, 300) }
+}
+
+// Une demande est « active » tant que le capteur ne l'a pas terminée.
+export const isActiveCommand = (c) => c?.status === 'pending' || c?.status === 'running'

@@ -1,6 +1,6 @@
 // Vérifications de la logique R3 (aucune dépendance) : node scripts/r3-check.mjs
 import assert from 'node:assert/strict'
-import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage } from '../src/lib/findings.js'
+import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand } from '../src/lib/findings.js'
 
 let passed = 0
 const failures = []
@@ -49,6 +49,21 @@ check('état du capteur selon le dernier pouls', () => {
 check('table absente reconnue', () => {
   assert.equal(isMissingTableMessage("Could not find the table 'public.sensors' in the schema cache"), true)
   assert.equal(isMissingTableMessage('permission denied'), false)
+})
+
+check('résultat de commande : JSON, texte libre, vide', () => {
+  assert.deepEqual(parseCommandResult('{"code":"scan_done","hosts":3}'), { code: 'scan_done', hosts: 3 })
+  assert.deepEqual(parseCommandResult('terminé'), { code: 'raw', message: 'terminé' })
+  assert.deepEqual(parseCommandResult('{"x":1}'), { code: 'raw', message: '{"x":1}' })
+  assert.equal(parseCommandResult(null), null)
+  assert.equal(parseCommandResult(''), null)
+})
+
+check('commande active : pending et running seulement', () => {
+  assert.equal(isActiveCommand({ status: 'pending' }), true)
+  assert.equal(isActiveCommand({ status: 'running' }), true)
+  assert.equal(isActiveCommand({ status: 'done' }), false)
+  assert.equal(isActiveCommand(undefined), false)
 })
 
 console.log('')
