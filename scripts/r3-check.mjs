@@ -1,6 +1,6 @@
 // Vérifications de la logique R3 (aucune dépendance) : node scripts/r3-check.mjs
 import assert from 'node:assert/strict'
-import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand, pickSensorFor, blockState, localFixOf, fixSensorFor, hostKey } from '../src/lib/findings.js'
+import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand, pickSensorFor, blockState, localFixOf, fixSensorFor, hostKey, buildTimeline, parseIpList } from '../src/lib/findings.js'
 
 let passed = 0
 const failures = []
@@ -100,6 +100,24 @@ check('correction locale : clé « local:<pc>:<id> » → capteur du même PC', 
   const sensors = [{ id: 'a', name: 'SRV-1' }, { id: 'b', name: 'PC-Accueil' }]
   assert.equal(fixSensorFor({ finding_key: 'local:pc-accueil:telnet' }, sensors).id, 'b')
   assert.equal(fixSensorFor({ finding_key: 'local:autre:telnet' }, sensors), null)
+})
+
+check('journal SOC : événements enregistrés seulement, du plus récent au plus ancien', () => {
+  const tl = buildTimeline({
+    alerts: [{ id: 'a', created_at: '2026-11-24T10:00:00Z' }, { id: 'x', created_at: null }],
+    vulns: [{ id: 'v', created_at: '2026-11-24T09:00:00Z', status: 'resolved', resolved_at: '2026-11-24T11:00:00Z' }, { id: 'w', created_at: '2026-11-24T08:00:00Z', status: 'open' }],
+    commands: [{ id: 'c', created_at: '2026-11-24T10:30:00Z' }],
+    blocked: [{ id: 'b', blocked_at: '2026-11-24T10:40:00Z', status: 'released', released_at: '2026-11-24T12:00:00Z' }, { id: 'f', blocked_at: '2026-11-24T10:45:00Z', status: 'failed' }],
+  })
+  assert.deepEqual(tl.map((i) => i.id), ['unblock:b', 'vuln_resolved:v', 'block:b', 'command:c', 'alert:a', 'vuln_new:v', 'vuln_new:w'])
+  assert.equal(buildTimeline({ alerts: Array.from({ length: 5 }, (_, i) => ({ id: i, created_at: `2026-11-2${i}T00:00:00Z` })) }, 3).length, 3)
+  assert.deepEqual(buildTimeline(), [])
+})
+
+check('liste de confiance : IPv4 valides, doublons retirés, erreurs signalées', () => {
+  assert.deepEqual(parseIpList('192.168.1.5, 192.168.1.6\n192.168.1.5;abc 300.1.1.1'), { ips: ['192.168.1.5', '192.168.1.6'], invalid: ['abc', '300.1.1.1'], tooMany: false })
+  assert.deepEqual(parseIpList(''), { ips: [], invalid: [], tooMany: false })
+  assert.equal(parseIpList(Array.from({ length: 101 }, (_, i) => `10.0.${Math.floor(i / 250)}.${i % 250}`).join(' ')).tooMany, true)
 })
 
 console.log('')

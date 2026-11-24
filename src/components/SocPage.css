@@ -1,0 +1,18 @@
+.soc-page .soc-kpis{list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0;padding:0}
+.soc-page .soc-kpis li{border:1px solid var(--b);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px}
+.soc-page .soc-kpis b{font-size:22px}
+.soc-page .soc-kpis span{color:var(--m);font-size:11px}
+.soc-page .soc-filters{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px}
+.soc-page .soc-filters button{width:auto;margin:0;padding:6px 14px;background:var(--surface2);color:var(--t)}
+.soc-page .soc-filters button.on{background:var(--primary);color:var(--on-accent)}
+.soc-page .soc-list{list-style:none;margin:0;padding:0}
+.soc-page .soc-list li{display:grid;grid-template-columns:12px 160px 150px 1fr;gap:12px;align-items:start;padding:10px 4px;border-bottom:1px solid var(--row-border);font-size:13px}
+.soc-page .soc-dot{width:10px;height:10px;border-radius:50%;margin-top:4px;background:var(--m)}
+.soc-page .soc-block .soc-dot{background:var(--danger-ink)}
+.soc-page .soc-unblock .soc-dot,.soc-page .soc-vuln_resolved .soc-dot{background:var(--success-ink)}
+.soc-page .soc-command .soc-dot{background:var(--accent-ink)}
+.soc-page time{color:var(--m);font-size:12px}
+.soc-page .soc-type{color:var(--m);font-size:12px}
+.soc-page .soc-title{color:var(--t);word-break:break-word}
+.soc-page .soc-empty{padding:22px 0;text-align:center}
+@media(max-width:900px){.soc-page .soc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.soc-page .soc-list li{grid-template-columns:12px 1fr}.soc-page .soc-list li time,.soc-page .soc-list li .soc-type{grid-column:2}.soc-page .soc-list li .soc-body{grid-column:2}}

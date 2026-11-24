@@ -64,3 +64,32 @@ export const fixSensorFor = (vuln, sensors = []) => {
   const fix = localFixOf(vuln)
   return fix ? sensors.find((s) => hostKey(s.name) === fix.host) || null : null
 }
+
+// Journal de la page « Surveillance (SOC) » : uniquement des événements ENREGISTRÉS (alertes, faiblesses,
+// demandes au capteur, blocages), du plus récent au plus ancien. Rien n'est déduit ni inventé.
+const tsOf = (v) => { const n = v ? new Date(v).getTime() : NaN; return Number.isFinite(n) ? n : null }
+export const TIMELINE_GROUPS = { alert: 'alerts', vuln_new: 'vulns', vuln_resolved: 'vulns', command: 'actions', block: 'actions', unblock: 'actions' }
+export function buildTimeline({ alerts = [], vulns = [], commands = [], blocked = [] } = {}, limit = 200) {
+  const items = []
+  const push = (type, at, row) => { const ts = tsOf(at); if (ts !== null) items.push({ id: `${type}:${row.id}`, type, at, ts, row }) }
+  for (const a of alerts) push('alert', a.created_at, a)
+  for (const v of vulns) {
+    push('vuln_new', v.created_at, v)
+    if ((v.status || 'open') === 'resolved' && v.resolved_at) push('vuln_resolved', v.resolved_at, v)
+  }
+  for (const c of commands) push('command', c.created_at, c)
+  for (const b of blocked) {
+    if (b.status !== 'failed') push('block', b.blocked_at, b)
+    if (b.status === 'released' && b.released_at) push('unblock', b.released_at, b)
+  }
+  return items.sort((x, y) => y.ts - x.ts).slice(0, limit)
+}
+
+// Liste « ne jamais bloquer » saisie dans « Paramètres » : IPv4 valides, sans doublon, 100 au plus.
+const IPV4 = /^((25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])$/
+export function parseIpList(text) {
+  const parts = String(text || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)
+  const invalid = parts.filter((p) => !IPV4.test(p))
+  const ips = [...new Set(parts.filter((p) => IPV4.test(p)))]
+  return { ips, invalid, tooMany: ips.length > 100 }
+}
