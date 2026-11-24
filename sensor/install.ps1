@@ -11,6 +11,8 @@
   - Active les leurres (honeypot) : services factices dont tout contact révèle une intrusion,
     avec une règle de pare-feu limitée au capteur et au réseau local (désactivables : -NoHoneypot).
   - Programme l'analyse non intrusive des vulnérabilités des appareils connus (désactivable : -NoVulnScan).
+  - Installe l'interface (tableau de bord) : le capteur la sert lui-même sur http://<ce PC>:8710, avec une règle
+    de pare-feu limitée au réseau local et un raccourci sur le Bureau (désactivable : -NoUi ; ce PC seulement : -UiLocalOnly).
   - Crée une tâche planifiée qui lance le capteur au démarrage, en compte SYSTEM,
     et le relance automatiquement s'il s'arrête.
   Aucun réglage du réseau du client n'est modifié. Relancer ce script met à jour l'installation.
@@ -36,6 +38,9 @@ param(
   [switch]$Push,
   [switch]$NoHoneypot,
   [switch]$NoVulnScan,
+  [switch]$NoUi,
+  [switch]$UiLocalOnly,
+  [ValidateRange(1024, 65535)][int]$UiPort = 8710,
   [ValidateRange(1, 168)][int]$VulnScanHours = 24,
   [string[]]$HoneypotAllow = @(),
   [string]$EnvFile = '',
@@ -260,7 +265,7 @@ try {
     if (Test-Path $InstallDir) { Remove-Item -Path $InstallDir -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     $items = @('listener.mjs', 'vulnscan.mjs', 'package.json', 'README.md', 'install.ps1', 'uninstall.ps1', 'install.cmd',
-      'uninstall.cmd', 'vulnscan.cmd', 'lib', 'node_modules', 'node.exe', 'node-LICENSE.txt')
+      'uninstall.cmd', 'vulnscan.cmd', 'lib', 'ui', 'node_modules', 'node.exe', 'node-LICENSE.txt')
     foreach ($item in $items) {
       $path = Join-Path $Source $item
       if (Test-Path $path) { Copy-Item -Path $path -Destination $InstallDir -Recurse -Force }
@@ -420,6 +425,24 @@ try {
     if ($vulnScanEnabled) { Write-Ok "Analyse toutes les $VulnScanHours h (première analyse 5 min après l'apprentissage)" }
     else { Write-Ok 'Analyse périodique désactivée (possible à la demande avec vulnscan.cmd)' }
 
+    Write-Step 'Interface (tableau de bord)'
+    Write-Note "Le capteur affiche lui-même le tableau de bord dans le navigateur (port $UiPort)."
+    $uiAvailable = Test-Path (Join-Path $InstallDir 'ui\index.html')
+    $uiEnabled = $false
+    if ($NoUi) {
+      Write-Ok 'Interface désactivée'
+    } elseif (-not $uiAvailable) {
+      Write-Attention 'Dossier « ui » absent du paquet : interface non installée.'
+    } elseif (-not $pushEnabled) {
+      Write-Attention 'L''interface a besoin du compte du tableau de bord (étape précédente) : non activée. Relancez avec -Reconfigure.'
+    } else {
+      $uiEnabled = Read-YesNo 'Activer l''interface sur ce PC (recommandé) ?' $true
+      if ($uiEnabled) {
+        if ($UiLocalOnly) { Write-Ok "Interface : http://localhost:$UiPort (ce PC seulement)" }
+        else { Write-Ok "Interface : http://$($env:COMPUTERNAME):$UiPort (visible depuis le réseau local, connexion par compte)" }
+      } else { Write-Ok 'Interface désactivée' }
+    }
+
     # Une référence apprise sur un autre réseau ou une autre passerelle n'est plus valable.
     if ((Test-Path $baselineFile) -and $existing -and ($existing.gateway -ne $selected.Gateway)) {
       Remove-Item -Path $baselineFile -Force
@@ -441,6 +464,9 @@ try {
       honeypotAllow = $honeypotAllow
       vulnScan = $vulnScanEnabled
       vulnScanHours = $VulnScanHours
+      ui = $uiEnabled
+      uiPort = $UiPort
+      uiLan = (-not $UiLocalOnly)
       client = $ClientName
       authorizationRef = $AuthorizationRef
       authorizedBy = "$env:USERDOMAIN\$env:USERNAME"
@@ -454,6 +480,12 @@ try {
     $ClientName = [string]$existing.client
     $honeypotEnabled = [bool]$existing.honeypot
     $DefaultHoneypotPorts = @($existing.honeypotPorts | Where-Object { $_ })
+    $uiEnabled = [bool]$existing.ui
+    if ($existing.uiPort) { $UiPort = [int]$existing.uiPort }
+    $UiLocalOnly = ($null -ne $existing.uiLan) -and (-not [bool]$existing.uiLan)
+    if ($null -eq $existing.ui) {
+      Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer l''interface (tableau de bord).'
+    }
     if (($null -eq $existing.honeypot) -or ($null -eq $existing.vulnScan)) {
       Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer les leurres et l''analyse des vulnérabilités.'
     }
@@ -499,6 +531,12 @@ try {
   # les leurres ne verraient donc rien. La règle n'ouvre que les ports des leurres, seulement pour
   # le programme du capteur, et seulement depuis le réseau local (jamais depuis Internet).
   Get-NetFirewallRule -Group $FirewallGroup -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+  if ($uiEnabled -and -not $UiLocalOnly) {
+    New-NetFirewallRule -DisplayName 'CyberVeylix Sensor - interface web (réseau local uniquement)' -Group $FirewallGroup `
+      -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([string]$UiPort) -Program $node `
+      -RemoteAddress LocalSubnet -Profile Any | Out-Null
+    Write-Ok "Pare-feu Windows : port $UiPort ouvert au réseau local pour l'interface"
+  }
   if ($honeypotEnabled -and $DefaultHoneypotPorts.Count -gt 0) {
     $portList = @($DefaultHoneypotPorts | ForEach-Object { [string]$_ })
     New-NetFirewallRule -DisplayName 'CyberVeylix Sensor - leurres (réseau local uniquement)' -Group $FirewallGroup `
@@ -506,6 +544,17 @@ try {
       -RemoteAddress LocalSubnet -Profile Any | Out-Null
     Write-Ok 'Pare-feu Windows : ports des leurres ouverts au réseau local, pour le capteur uniquement'
     Write-Note 'Si un autre pare-feu (antivirus) est actif, autorisez-y aussi le capteur.'
+  }
+
+  # Raccourci « CyberVeylix » sur le Bureau de tous les utilisateurs (ouvre l'interface dans le navigateur).
+  $desktop = [Environment]::GetFolderPath('CommonDesktopDirectory')
+  $shortcut = Join-Path $desktop 'CyberVeylix.url'
+  if ($uiEnabled) {
+    $shortcutText = "[InternetShortcut]`r`nURL=http://localhost:$UiPort/`r`n"
+    [System.IO.File]::WriteAllText($shortcut, $shortcutText, [System.Text.Encoding]::ASCII)
+    Write-Ok 'Raccourci « CyberVeylix » créé sur le Bureau'
+  } elseif (Test-Path $shortcut) {
+    Remove-Item -Path $shortcut -Force
   }
 
   # Entrée dans « Applications installées » : le client voit le logiciel et peut le désinstaller.
@@ -554,8 +603,24 @@ try {
     Write-Attention "Pas de confirmation après 25 s. Consultez le journal : $log"
   }
 
+  if ($uiEnabled -and $started) {
+    $uiOk = $false
+    for ($i = 0; $i -lt 10 -and -not $uiOk; $i++) {
+      try {
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:$UiPort/config.js" -UseBasicParsing -TimeoutSec 3
+        if ($r.StatusCode -eq 200) { $uiOk = $true }
+      } catch { Start-Sleep -Seconds 1 }
+    }
+    if ($uiOk) { Write-Ok "Interface en ligne : http://localhost:$UiPort" }
+    else { Write-Attention "L'interface ne répond pas sur le port $UiPort (port déjà utilisé ?). Voir le journal : $log" }
+  }
+
   Write-Host ''
   Write-Host 'Installation terminée.' -ForegroundColor Green
+  if ($uiEnabled) {
+    Write-Note "Interface           : http://localhost:$UiPort  (raccourci « CyberVeylix » sur le Bureau)"
+    if (-not $UiLocalOnly) { Write-Note "Depuis un autre PC  : http://$($env:COMPUTERNAME):$UiPort  (réseau local)" }
+  }
   Write-Note "Journal en direct   : Get-Content '$log' -Wait -Tail 20"
   Write-Note "Alertes (JSON)      : $(Join-Path $DataDir 'events.jsonl')"
   Write-Note "Rapports            : $DataDir\rapport-vulnerabilites-*.html (ouvrir dans un navigateur, imprimable en PDF)"

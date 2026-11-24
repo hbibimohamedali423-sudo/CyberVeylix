@@ -10,6 +10,10 @@ on:
   pull_request:
     paths:
       - 'sensor/**'
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
       - '.github/workflows/sensor-build.yml'
   push:
     tags:
@@ -72,6 +76,15 @@ jobs:
       - name: Tests du capteur
         run: node sensor/test/run.mjs
 
+      # Interface (tableau de bord) servie par le capteur lui-même : build React statique, dossier « ui » du paquet.
+      # Aucune clé dans le build : l'URL Supabase et la clé publique viennent de agent.env au lancement (/config.js).
+      - name: Interface (build)
+        shell: pwsh
+        run: |
+          npm ci
+          npm run build
+          if (-not (Test-Path dist/index.html)) { throw 'Build de l''interface absent (dist/index.html).' }
+
       - name: Assemblage du paquet
         shell: pwsh
         run: |
@@ -89,6 +102,8 @@ jobs:
                           'install.cmd', 'uninstall.cmd', 'vulnscan.cmd', 'vulnscan.mjs', 'lib', 'node_modules')) {
             Copy-Item -Path "sensor/$i" -Destination $out -Recurse
           }
+
+          Copy-Item -Path 'dist' -Destination (Join-Path $out 'ui') -Recurse
 
           # Même node.exe que celui qui a compilé cap.node : compatibilité binaire garantie.
           $node = (Get-Command node).Source

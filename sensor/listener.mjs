@@ -25,6 +25,7 @@ import { isPrivateIpv4 } from './lib/vuln/scan.mjs'
 import { runVulnScan } from './lib/vuln/run.mjs'
 import { countBySeverity } from './lib/vuln/report.mjs'
 import { connectSupabase, createPusher } from './lib/push.mjs'
+import { startWebServer } from './lib/web-server.mjs'
 
 const require = createRequire(import.meta.url)
 const run = promisify(execFile)
@@ -306,6 +307,20 @@ if (learnMinutes > 0) {
 // après redémarrage ils ne seront plus « nouveaux » (l'alerte a déjà été émise et journalisée).
 // La MAC de la passerelle, elle, reste verrouillée sur la valeur apprise.
 setInterval(saveBaseline, 60 * 1000).unref()
+
+// Interface web (tableau de bord) servie par le capteur lui-même : http://<ce PC>:<port>.
+// Sans SUPABASE_URL / SUPABASE_ANON_KEY (agent.env) elle s'ouvre sur l'écran « Configuration requise ».
+// Un port déjà pris ou un dossier « ui » absent n'arrête jamais la surveillance.
+if (opts.ui) {
+  const uiRoot = join(HERE, 'ui')
+  if (!existsSync(join(uiRoot, 'index.html'))) {
+    console.log(`⚠ Interface web : dossier ${uiRoot} absent, non démarrée.`)
+  } else {
+    startWebServer({ root: uiRoot, port: opts.uiPort, host: opts.uiLan ? '0.0.0.0' : '127.0.0.1' })
+      .then((s) => console.log(`✔ Interface web : http://${hostname()}:${s.port}${opts.uiLan ? ' (réseau local)' : ' (ce PC seulement)'}`))
+      .catch((e) => console.log(`⚠ Interface web non démarrée (port ${opts.uiPort}) : ${e.message}`))
+  }
+}
 
 // Pouls toutes les 5 minutes : l'application affiche « en service » ou « arrêté depuis… ».
 heartbeat()

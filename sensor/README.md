@@ -73,6 +73,18 @@ considéré comme corrigé). Avec `--push`, les faiblesses rejoignent la page «
 **Limites** : la base de règles est courte et vérifiée, pas exhaustive. L'absence de résultat ne prouve pas
 l'absence de vulnérabilité.
 
+## Interface (tableau de bord)
+L'installateur place le tableau de bord dans le dossier `ui` et le capteur le sert lui-même : aucun site
+externe à installer. Sur le PC : raccourci **CyberVeylix** sur le Bureau, ou `http://localhost:8710`.
+Depuis un autre appareil du réseau local : `http://<nom du PC>:8710`.
+
+- La connexion se fait avec le compte du tableau de bord ; la page ne contient que l'URL du projet et la clé
+  publique « anon » (`/config.js`), jamais le mot de passe du compte ni une clé `service_role`.
+- Pare-feu : règle limitée au réseau local (`LocalSubnet`) et au programme du capteur, jamais Internet.
+  `-UiLocalOnly` : ce PC seulement (pas de règle). `-NoUi` : pas d'interface. `-UiPort 9000` : autre port.
+- Nécessite l'envoi au tableau de bord (`-Push` / compte renseigné à l'installation).
+- À la main : `node listener.mjs --yes --ui [--ui-port=8710] [--ui-local]`.
+
 ## Ce qu'il ne fait pas
 - Il ne bloque rien et n'isole aucun appareil (les leurres observent, ils ne ripostent pas).
 - Il ne voit que le trafic **diffusé** (ARP, DHCP) : il ne voit pas la navigation des autres appareils.

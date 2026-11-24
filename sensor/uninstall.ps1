@@ -191,6 +191,10 @@ try {
   if (Test-Path $UninstallKey) { Remove-Item -Path $UninstallKey -Recurse -Force }
   Write-Ok 'Entrée « Applications installées » supprimée'
 
+  # Raccourci du Bureau créé par install.ps1.
+  $desktopShortcut = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'CyberVeylix.url'
+  if (Test-Path $desktopShortcut) { Remove-Item -Path $desktopShortcut -Force }
+
   # Règles de pare-feu des leurres créées par install.ps1.
   $rules = @(Get-NetFirewallRule -Group $FirewallGroup -ErrorAction SilentlyContinue)
   if ($rules.Count -gt 0) {
