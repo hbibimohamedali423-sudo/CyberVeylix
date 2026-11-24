@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node scripts/csv-check.mjs && node scripts/i18n-check.mjs",
+    "test": "node scripts/csv-check.mjs && node scripts/i18n-check.mjs && node scripts/agent-check.mjs && node sensor/test/run.mjs",
     "preview": "vite preview",
     "agent:check": "node --env-file=agent/.env agent/scan.mjs --check"
   },

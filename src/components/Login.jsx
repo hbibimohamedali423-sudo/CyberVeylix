@@ -3,6 +3,11 @@ import { supabase } from '../supabaseClient'
 import { useI18n } from '../i18n/context.js'
 import { LanguageSelect } from '../i18n/index.jsx'
 
+// Inscription masquée par défaut : CyberVeylix est réservé aux comptes créés par l'administrateur.
+// ATTENTION : masquer le bouton ne suffit pas. Désactiver aussi les inscriptions côté serveur :
+// Supabase > Authentication > Sign In / Providers > « Allow new users to sign up » : OFF.
+const ALLOW_SIGNUP = import.meta.env.VITE_ALLOW_SIGNUP === 'true'
+
 export default function Login() {
   const { t } = useI18n()
   const [email, setEmail] = useState('')
@@ -27,7 +32,7 @@ export default function Login() {
         <input type="email" placeholder={t('login.email')} value={email} onChange={(e) => setEmail(e.target.value)} />
         <input type="password" placeholder={t('login.password')} value={password} onChange={(e) => setPassword(e.target.value)} />
         <button onClick={signIn}>{t('login.signIn')}</button>
-        <button className="x wide" onClick={signUp}>{t('login.signUp')}</button>
+        {ALLOW_SIGNUP && <button className="x wide" onClick={signUp}>{t('login.signUp')}</button>}
         {msg && <p className="m" style={{ marginTop: 10 }}>{msg}</p>}
       </div>
     </div>

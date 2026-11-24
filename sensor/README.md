@@ -1,0 +1,148 @@
+# Capteur passif CyberVeylix
+
+Écoute le réseau local et signale en temps réel les signes d'attaque ou de panne visibles par
+n'importe quel poste du réseau. Il n'envoie de lui-même aucun paquet : seuls ses leurres
+(facultatifs) répondent à qui s'y connecte. Aucun réglage n'est modifié chez le client :
+ni routeur, ni switch, ni appareil.
+
+## Ce qu'il détecte
+| Événement | Gravité | Signification |
+|---|---|---|
+| Usurpation de la passerelle | Critique | Une autre machine se fait passer pour le routeur : attaque « homme du milieu » probable |
+| Serveur DHCP non autorisé | Critique | Un appareil distribue des adresses : serveur pirate ou équipement mal configuré qui perturbe le réseau |
+| Usurpation ARP probable | Haute | Une même machine revendique rapidement 5 adresses IP ou plus (empoisonnement ARP) |
+| Changement de MAC sur une adresse connue | Haute | Conflit d'adresse IP ou usurpation ciblée d'un appareil |
+| Inondation d'adresses MAC | Haute | Plus de 20 nouveaux appareils par minute : attaque par inondation ou outil de balayage |
+| Nouvel appareil détecté | Moyenne | Une MAC jamais vue apparaît sur le réseau |
+| Balayage de ports interne (leurres) | Critique | Un appareil sonde au moins 3 leurres en une minute : reconnaissance ou malware qui se propage |
+| Tentative d'intrusion sur un leurre | Critique | Identifiant envoyé à un faux Telnet, FTP ou portail web : attaque de mots de passe, botnet type Mirai |
+| Connexion à un service leurre | Haute | Un appareil se connecte à un service que personne n'a de raison d'utiliser |
+
+## Leurres (honeypot)
+Avec `--honeypot` (activé par défaut par l'installateur), le capteur ouvre sur l'adresse du PC des
+services factices : FTP (21), SSH (22), Telnet (23, 2323), portail web (80, 8080), SQL Server (1433),
+MySQL (3306), Bureau à distance (3389) et VNC (5900). Aucun appareil légitime n'a de raison de s'y
+connecter : **tout contact est une alerte**, dès la première seconde (pas de période d'apprentissage).
+
+- **Mots de passe jamais conservés** : un employé peut taper son vrai mot de passe par erreur. Seuls
+  l'identifiant et le fait qu'un mot de passe a été envoyé sont enregistrés.
+- **Faible interaction** : les leurres n'exécutent rien et ferment vite la connexion
+  (15 s maximum, 4 Ko lus au plus, 64 connexions simultanées par leurre).
+- **Vrais services protégés** : si un port est déjà servi sur ce PC (ex. Bureau à distance activé, IIS),
+  le leurre correspondant est ignoré et le vrai service n'est jamais perturbé.
+- **Pare-feu** : l'installateur ajoute une règle Windows qui n'ouvre que ces ports, pour le seul
+  programme du capteur, et seulement depuis le réseau local (groupe « CyberVeylix », retiré à la désinstallation).
+- **Scanners légitimes** : si le client utilise un outil d'inventaire ou de scan, ajoutez son IP avec
+  `--honeypot-allow=192.168.1.50` (ou à la question de l'installateur) pour ne pas déclencher d'alerte.
+  Le PC du capteur lui-même est toujours ignoré (l'agent `agent/scan.mjs` peut y tourner).
+- Chaque alerte indique l'IP **et la MAC** de l'appareil fautif quand elle est connue.
+
+## Analyse des vulnérabilités
+Avec `--vuln-scan` (proposé par l'installateur), le capteur analyse les appareils qu'il a appris
+5 minutes après l'apprentissage, puis toutes les 24 h (`--vuln-scan-hours`). À la demande :
+```
+node sensor/vulnscan.mjs --yes --targets=192.168.1.0/24 --client="Société X"
+```
+(sur un PC installé : `vulnscan.cmd` en administrateur, qui reprend les appareils et le client du capteur).
+
+**Non intrusive** : lecture de ce que chaque service annonce et négociation normale des protocoles.
+Aucune exploitation, aucun essai de mot de passe, réseaux privés uniquement (10/8, 172.16/12, 192.168/16).
+
+| Contrôle | Gravité | Comment |
+|---|---|---|
+| vsftpd 2.3.4 (porte dérobée, CVE-2011-2523) | Critique | Bannière FTP |
+| ProFTPD 1.3.5 mod_copy (CVE-2015-3306) | Critique | Bannière FTP (à vérifier : module chargé ?) |
+| Apache 2.4.49 / 2.4.50 (CVE-2021-41773 / 42013) | Critique | En-tête HTTP Server |
+| IIS 6.0 / Windows Server 2003 (CVE-2017-7269) | Critique | En-tête HTTP Server |
+| VNC sans mot de passe | Critique | Types de sécurité RFB |
+| Redis, API Docker sans authentification | Critique | PING Redis, GET /version |
+| OpenSSH 8.5p1 à 9.7p1 « regreSSHion » (CVE-2024-6387) | Haute | Bannière SSH (« à vérifier » si la distribution corrige sans changer de numéro) |
+| SSH v1, Dropbear < 2016.74 | Haute | Bannière SSH |
+| SMBv1 activé (EternalBlue, CVE-2017-0144) | Haute | Négociation SMB1 seule, sans authentification |
+| Bureau à distance sans NLA (BlueKeep, CVE-2019-0708) | Haute | Négociation RDP en TLS seul |
+| Telnet actif, Elasticsearch ouvert | Haute | Connexion / GET / |
+| FTP sans TLS, page de connexion en HTTP, bases de données exposées, TLS 1.0, certificat expiré | Moyenne | FEAT, page d'accueil, négociation TLS |
+| Certificat auto-signé | Basse | Certificat TLS |
+
+Chaque analyse produit `rapport-vulnerabilites-AAAAMMJJ-HHMM.html` dans le dossier de données (à ouvrir
+dans un navigateur, imprimable en PDF pour le client : preuves, CVE, corrections recommandées) et met à jour
+`vulns-latest.json`. Alertes : la première analyse donne un résumé et les faiblesses critiques ; ensuite,
+chaque **nouvelle** faiblesse et chaque faiblesse **corrigée** est signalée (un appareil éteint n'est jamais
+considéré comme corrigé). Avec `--push`, les faiblesses rejoignent la page « Vulnérabilités » du tableau de bord.
+
+**Limites** : la base de règles est courte et vérifiée, pas exhaustive. L'absence de résultat ne prouve pas
+l'absence de vulnérabilité.
+
+## Ce qu'il ne fait pas
+- Il ne bloque rien et n'isole aucun appareil (les leurres observent, ils ne ripostent pas).
+- Il ne voit que le trafic **diffusé** (ARP, DHCP) : il ne voit pas la navigation des autres appareils.
+- Il ne corrige pas lui-même les appareils : le rapport donne les corrections, l'analyse suivante vérifie qu'elles sont faites.
+
+## Installation (Windows)
+1. Installer **Node.js 20.6 ou plus récent**.
+2. Installer **Npcap** depuis https://npcap.com en cochant **« Install Npcap in WinPcap API-compatible Mode »**.
+3. Installer les **Visual Studio Build Tools** avec la charge « Développement Desktop en C++ »
+   (le module `cap` est compilé lors de l'installation).
+4. Depuis la racine du projet :
+```
+npm install --prefix sensor
+```
+
+## Utilisation
+Lister les interfaces réseau :
+```
+node sensor/listener.mjs --list
+```
+Lancer la surveillance (`--yes` confirme l'autorisation écrite du propriétaire du réseau) :
+```
+node sensor/listener.mjs --yes
+```
+
+Au premier lancement, le capteur **apprend le réseau normal pendant 10 minutes** sans alerter
+(appareils présents, MAC de la passerelle, serveur DHCP légitime), puis passe en surveillance.
+La référence est enregistrée dans `sensor/data/baseline.json` et rechargée aux lancements suivants.
+
+| Option | Rôle |
+|---|---|
+| `--interface=192.168.1.10` | Interface à écouter (IP ou nom affiché par `--list`). Par défaut : la première interface en adresse privée |
+| `--gateway=192.168.1.1` | IP de la passerelle (détectée automatiquement sinon) |
+| `--gateway-mac=00:11:22:33:44:55` | MAC de la passerelle fixée à la main. **Recommandé** : sans elle, la première MAC vue pour la passerelle sert de référence |
+| `--learn-minutes=10` | Durée d'apprentissage (0 si une référence existe déjà) |
+| `--reset-baseline` | Oublie la référence et réapprend le réseau |
+| `--push` | Envoie aussi les alertes au tableau de bord (voir ci-dessous) |
+| `--honeypot` / `--no-honeypot` | Active / désactive les leurres |
+| `--honeypot-ports=21,23,8080` | Ports des leurres (par défaut : la liste ci-dessus) |
+| `--honeypot-allow=192.168.1.50` | IP autorisées à toucher les leurres sans alerte (séparées par des virgules) |
+| `--vuln-scan` / `--no-vuln-scan` | Active / désactive l'analyse périodique des vulnérabilités |
+| `--vuln-scan-hours=24` | Intervalle entre deux analyses (1 à 168 h) |
+
+Les alertes s'affichent dans la console et sont ajoutées à `sensor/data/events.jsonl`.
+
+### Envoi vers le tableau de bord
+```
+node --env-file=agent/.env sensor/listener.mjs --yes --push
+```
+Utilise les mêmes variables que l'agent de découverte (`agent/.env`). Aucune modification du
+schéma Supabase n'est nécessaire : les alertes vont dans la table `alerts` existante.
+
+### Démarrage automatique
+Planificateur de tâches Windows → Créer une tâche :
+- Déclencheur : **Au démarrage**
+- Action : `sensor\run-sensor.bat` (journal dans `sensor\data\sensor.log`)
+- Cocher **« Exécuter même si l'utilisateur n'est pas connecté »**, et **« Exécuter avec les autorisations
+  maximales »** si Npcap a été installé en mode réservé aux administrateurs.
+
+## Tests
+```
+npm test --prefix sensor
+```
+Les analyseurs et la détection sont testés avec de vraies trames construites octet par octet,
+y compris 20 000 trames aléatoires ou corrompues (aucune exception tolérée).
+
+## Sécurité, vie privée et licences
+- Ne surveillez que des réseaux dont vous avez l'**autorisation écrite** du propriétaire.
+- `sensor/data/` contient l'inventaire du réseau du client : il est ignoré par Git, ne le partagez pas.
+- `--push` utilise le mot de passe de `agent/.env` : sur le poste d'un client, réservez la lecture de ce fichier à votre compte.
+- **Npcap** est gratuit pour un usage personnel ; son usage commercial ou sa redistribution
+  dans un produit vendu nécessitent une licence (https://npcap.com/oem/). Vérifiez ses conditions
+  avant de commercialiser CyberVeylix.

@@ -6,6 +6,7 @@ import { execFile, spawnSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
+import { normalizeMac, createIndex, matchHost, devicePatch, sensitivePortAlerts, planOffline } from './lib/reconcile.mjs'
 
 const run = promisify(execFile)
 const WIN = process.platform === 'win32'
@@ -78,8 +79,6 @@ async function ping(ip) {
     return WIN ? /TTL=/i.test(stdout) : true
   } catch { return false }
 }
-
-const normalizeMac = (value) => String(value || '').trim().toLowerCase().replaceAll('-', ':')
 
 function addArpLine(map, line) {
   const r = /(\d+\.\d+\.\d+\.\d+)\D+((?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2})/i.exec(line)
@@ -212,7 +211,7 @@ const NO_ALERTS = args.includes('--no-alerts')
 const must = (r) => {
   if (r.error) {
     const hint = /column|relation|schema|constraint|conflict/i.test(r.error.message)
-      ? ' (avez-vous exécuté supabase/schema_scan.sql, schema_hardening.sql et schema_n2_prep.sql ?)'
+      ? ' (avez-vous exécuté supabase/schema_scan.sql, schema_hardening.sql, schema_n2_prep.sql et schema_status.sql ?)'
       : ''
     die('Erreur base de données : ' + r.error.message + hint)
   }
@@ -258,6 +257,11 @@ if (CHECK) {
   const a = await sb.from('alerts')
     .select('network_id,device_id', { count: 'exact', head: true })
   console.log(a.error ? '✖ Table alerts (network_id, device_id) : ' + a.error.message + ' (exécutez supabase/schema_n2_prep.sql)' : 'Table alerts (network_id, device_id) : OK')
+  // Colonnes de suivi utilisées par les boutons « Prise en compte » / « Résoudre » et la note.
+  for (const [table, cols] of [['alerts', 'status,acknowledged_at,resolved_at'], ['vulnerabilities', 'status,acknowledged_at,resolved_at,note']]) {
+    const r = await sb.from(table).select(cols, { count: 'exact', head: true })
+    console.log(r.error ? `✖ Table ${table} (suivi) : ${r.error.message} (exécutez supabase/schema_status.sql)` : `Table ${table} (statut, dates${table === 'vulnerabilities' ? ', note' : ''}) : OK`)
+  }
   await sb.auth.signOut()
   process.exit(0)
 }
@@ -353,93 +357,75 @@ console.log('3/3 Enregistrement…')
 const existing = must(await sb.from('devices').select('*').eq('network_id', network.id)) || []
 const unassigned = must(await sb.from('devices').select('id,ip').is('network_id', null)) || []
 const unassignedIps = new Set(unassigned.map((d) => d.ip).filter(Boolean))
-const byIp = new Map()
-const byMac = new Map()
-for (const d of existing) {
-  if (d.ip && !byIp.has(d.ip)) byIp.set(d.ip, d)
-  if (d.mac) {
-    const mac = normalizeMac(d.mac)
-    if (!byMac.has(mac)) byMac.set(mac, d)
-  }
-}
-const claimed = new Set()
+// Identité d'un appareil = sa MAC (voir agent/lib/reconcile.mjs, testé par scripts/agent-check.mjs) :
+// une MAC connue est suivie même si son IP change ; une MAC nouvelle sur une IP connue est un NOUVEL
+// appareil (l'ancien n'est jamais écrasé) ; une même MAC sur deux IP ne fait pas alterner un enregistrement.
+const index = createIndex(existing)
+const touched = new Set()
 const now = new Date().toISOString()
 // Premier inventaire de CE réseau : on enregistre tout comme référence, sans créer d'alertes.
 const baseline = existing.length === 0
-const alerts = []
-const seenIds = new Set()
+let alertCount = 0
+let alertErrors = 0
+
+// Alertes enregistrées immédiatement, appareil par appareil : si le scan s'interrompt plus loin
+// (réseau, base), les alertes déjà dues ne sont plus perdues.
+async function raise(list, deviceId) {
+  if (baseline || NO_ALERTS || !list.length) return
+  const r = await sb.from('alerts').insert(list.map((a) => ({ ...a, device_id: deviceId, network_id: network.id })))
+  if (r.error) {
+    alertErrors++
+    console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_n2_prep.sql ?)')
+  } else {
+    alertCount += list.length
+  }
+}
 
 for (const h of alive) {
-  let ex = null
-  if (h.mac) {
-    const byMacMatch = byMac.get(h.mac)
-    if (byMacMatch && !claimed.has(byMacMatch.id)) ex = byMacMatch
-  }
-  if (!ex) {
-    const byIpMatch = byIp.get(h.ip)
-    if (byIpMatch && !claimed.has(byIpMatch.id)) ex = byIpMatch
-  }
+  const match = matchHost(h, index, touched)
   const who = `${h.ip}${h.name ? ' — ' + h.name : ''}`
-  const candidate = unassignedIps.has(h.ip)
   // Ne jamais adopter une ligne network_id = null et ne pas créer de doublon :
   // le propriétaire l'assigne dans l'interface, puis le prochain scan la retrouve.
-  if (!ex && candidate) {
+  if (!match.device && unassignedIps.has(h.ip)) {
     console.log(`    Candidat non assigné : ${h.ip}`)
     continue
   }
+  const hostAlerts = []
   let id
   let prev = []
-  if (ex) {
-    claimed.add(ex.id)
-    seenIds.add(ex.id)
-    const patch = { status: 'on', last_seen: now }
-    // La MAC n'est remplacée que si elle a été lue, pour ne pas effacer une valeur déjà connue.
-    if (h.mac) patch.mac = h.mac
-    if (!ex.discovery_source) patch.discovery_source = 'agent'
-    must(await sb.from('devices').update(patch).eq('id', ex.id))
-    id = ex.id
+  if (match.device) {
+    id = match.device.id
+    // MAC écrite seulement si elle manquait ; IP mise à jour si la MAC connue a changé d'adresse.
+    const patch = devicePatch(h, match.device, now)
+    if (!match.device.discovery_source) patch.discovery_source = 'agent'
+    must(await sb.from('devices').update(patch).eq('id', id))
     prev = (must(await sb.from('services').select('port').eq('device_id', id)) || []).map((x) => x.port)
   } else {
-    id = must(await sb.from('devices')
-      .insert({
-        name: h.name || h.ip,
-        ip: h.ip,
-        mac: h.mac,
-        network_id: network.id,
-        // Aucun type deviné : null reste « inconnu » tant que l'utilisateur ne renseigne pas.
-        type: null,
-        role: null,
-        status: 'on',
-        last_seen: now,
-        discovery_source: 'agent',
-      })
-      .select('id').single()).id
-    claimed.add(id)
-    seenIds.add(id)
-    if (!baseline) {
-      alerts.push({
-        title: 'Nouvel appareil détecté',
-        detail: who,
-        severity: 'm',
-        device_id: id,
-        network_id: network.id,
-      })
+    const row = {
+      name: h.name || h.ip,
+      ip: h.ip,
+      mac: normalizeMac(h.mac),
+      network_id: network.id,
+      // Aucun type deviné : null reste « inconnu » tant que l'utilisateur ne renseigne pas.
+      type: null,
+      role: null,
+      status: 'on',
+      last_seen: now,
+      discovery_source: 'agent',
     }
+    id = must(await sb.from('devices').insert(row).select('id').single()).id
+    index.add({ id, ...row })
+    let detail = who
+    if (match.replaced) {
+      detail += ` — a pris l'adresse ${h.ip} utilisée auparavant par ${match.replaced.name || 'un autre appareil'}`
+        + ` (${normalizeMac(match.replaced.mac)}). Changement d'appareil ou usurpation d'adresse.`
+    }
+    hostAlerts.push({ title: 'Nouvel appareil détecté', detail, severity: 'm' })
   }
+  touched.add(id)
   if (unassignedIps.has(h.ip)) console.log(`    Candidat non assigné : ${h.ip}`)
-  if (!baseline) {
-    for (const p of h.ports) {
-      if (SENSITIVE[p] && !prev.includes(p)) {
-        alerts.push({
-          title: `Port ${p} ouvert (${SENSITIVE[p][1]})`,
-          detail: who,
-          severity: SENSITIVE[p][0],
-          device_id: id,
-          network_id: network.id,
-        })
-      }
-    }
-  }
+  hostAlerts.push(...sensitivePortAlerts(h, prev, SENSITIVE))
+  await raise(hostAlerts, id)
   // upsert (nécessite l'index unique services_device_port_uq), puis suppression des seuls ports fermés :
   // une coupure en cours de route ne fait plus perdre toutes les données de l'appareil.
   if (h.ports.length) {
@@ -456,28 +442,23 @@ for (const h of alive) {
 
 // Un appareil absent n'est déclaré « Hors ligne » qu'après 90 minutes sans être vu
 // (évite le va-et-vient des téléphones et objets connectés qui s'endorment entre deux scans).
+// L'absence se juge par appareil rapproché, pas par IP ; un appareil ajouté à la main et jamais vu
+// par l'agent (last_seen vide) n'est jamais déclaré « Hors ligne ».
 const GRACE_MS = 90 * 60 * 1000
-const lastSeenMs = (d) => (d.last_seen ? new Date(d.last_seen).getTime() : 0)
-let off = 0
-let pending = 0
-for (const d of existing) {
-  if (d.ip && inRange(d.ip) && !seenIds.has(d.id) && d.status !== 'off') {
-    if (Date.now() - lastSeenMs(d) > GRACE_MS) {
-      must(await sb.from('devices').update({ status: 'off', ...(d.discovery_source ? {} : { discovery_source: 'agent' }) }).eq('id', d.id))
-      off++
-    } else {
-      pending++
-    }
-  }
+const { off: offIds, pending } = planOffline(existing, touched, inRange, Date.now(), GRACE_MS)
+for (const offId of offIds) {
+  const d = existing.find((x) => x.id === offId)
+  must(await sb.from('devices').update({ status: 'off', ...(d.discovery_source ? {} : { discovery_source: 'agent' }) }).eq('id', offId))
 }
+const off = offIds.length
 
 if (baseline) {
   console.log('    Premier inventaire : aucune alerte créée (référence de départ).')
-} else if (alerts.length && !NO_ALERTS) {
-  const r = await sb.from('alerts').insert(alerts)
-  if (r.error) console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_n2_prep.sql ?)')
-  else console.log(`    ${alerts.length} alerte(s) créée(s)`)
-} else {
+} else if (NO_ALERTS) {
+  console.log('    Alertes désactivées pour ce lancement (--no-alerts).')
+} else if (alertCount) {
+  console.log(`    ${alertCount} alerte(s) créée(s)`)
+} else if (!alertErrors) {
   console.log('    Aucune nouvelle alerte.')
 }
 
