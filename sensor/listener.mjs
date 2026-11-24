@@ -27,6 +27,9 @@ import { countBySeverity } from './lib/vuln/report.mjs'
 import { connectSupabase, createPusher } from './lib/push.mjs'
 import { startWebServer } from './lib/web-server.mjs'
 import { createCommandRunner } from './lib/commands.mjs'
+import { createActions } from './lib/actions.mjs'
+import { createBlocker } from './lib/blocker.mjs'
+import dns from 'node:dns/promises'
 
 const require = createRequire(import.meta.url)
 const run = promisify(execFile)
@@ -178,7 +181,14 @@ function report(events) {
     appendEvent(JSON.stringify({ at, ...e }))
   }
   if (opts.push && events.length) enqueue(async () => { const p = await pusher(); if (p) await p.pushAlerts(events) })
+  // Blocage automatique (réglage « auto_block » du capteur, désactivé par défaut) : géré par lib/actions.mjs.
+  if (opts.push && events.length) {
+    for (const e of events) {
+      Promise.resolve(autoActions && autoActions.maybeAutoBlock(e)).catch((err) => console.log('⚠ Blocage automatique : ' + err.message))
+    }
+  }
 }
+let autoActions = null // créé quand le lecteur de commandes démarre (nécessite la connexion au tableau de bord)
 
 // --- Capture -------------------------------------------------------------------------
 const device = pickDevice()
@@ -332,12 +342,34 @@ if (opts.ui) {
 if (opts.push) {
   pusher().then((p) => {
     if (!p) return
-    createCommandRunner({
+    // Adresses du tableau de bord (Supabase) : jamais bloquables, sinon le capteur se couperait lui-même.
+    let serviceCache = { at: 0, ips: [] }
+    const serviceIps = async () => {
+      if (Date.now() - serviceCache.at < 10 * 60 * 1000) return serviceCache.ips
+      try {
+        const host = new URL(process.env.SUPABASE_URL).hostname
+        serviceCache = { at: Date.now(), ips: await dns.resolve4(host) }
+      } catch { serviceCache = { at: Date.now(), ips: serviceCache.ips } }
+      return serviceCache.ips
+    }
+    const runner = createCommandRunner({
       client: p.client,
       sensorName: hostname(),
-      handlers: { scan_now: () => vulnScanOnce() },
-    }).start()
-    console.log('Commandes de la page web : à l\'écoute (toutes les 5 s).')
+      handlers: {
+        scan_now: () => vulnScanOnce(),
+        block_ip: (params) => autoActions.handlers.block_ip(params),
+        unblock_ip: (params) => autoActions.handlers.unblock_ip(params),
+      },
+    })
+    autoActions = createActions({
+      client: p.client,
+      getSensorId: runner.getSensorId,
+      blocker: createBlocker(),
+      context: () => ({ gatewayIp, sensorIp, dhcp: detectors.snapshot().trustedDhcpServers || [] }),
+      serviceIps,
+    })
+    runner.start()
+    console.log('Commandes de la page web : à l\'écoute (analyse, blocage et déblocage ; toutes les 5 s).')
   })
 }
 

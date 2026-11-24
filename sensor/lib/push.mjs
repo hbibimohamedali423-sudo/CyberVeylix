@@ -13,12 +13,22 @@ export const ALERT_SOURCE = {
 }
 
 const R1_ALERT_COLUMNS = ['source', 'kind']
+// Colonnes de supabase/schema_r4_actions.sql : origine réseau de l'événement (pour « bloquer cette adresse »).
+const R4_ALERT_COLUMNS = ['source_ip', 'source_mac']
+// L'adresse IP n'identifie le fautif que pour ces événements. Pour une usurpation de passerelle ou ARP,
+// l'IP annoncée est celle de la VICTIME imitée : seule la MAC (source_mac) désigne l'appareil à chercher.
+export const IP_IDENTIFIES_OFFENDER = new Set(['honeypot_touch', 'honeypot_scan', 'honeypot_login', 'rogue_dhcp', 'new_device'])
 const R1_VULN_COLUMNS = ['source', 'finding_key', 'cves', 'evidence', 'remediation', 'confidence', 'port', 'service', 'network_id', 'last_seen']
 const R1_SERVICE_COLUMNS = ['version', 'last_seen']
 
 // Colonne ou table absente (R1 pas encore exécuté) : erreurs PostgREST / PostgreSQL correspondantes.
 export const isMissingColumn = (err) => Boolean(err) && (err.code === 'PGRST204' || err.code === '42703'
   || /could not find the '.*' column|column .* does not exist/i.test(err.message || ''))
+// Nom de la colonne citée par une erreur « colonne absente » (PostgREST ou PostgreSQL), ou null.
+export const missingColumnName = (err) => {
+  const m = /the '([^']+)' column|column "?([a-z_0-9]+)"? (?:of relation|does not exist)/i.exec((err && err.message) || '')
+  return m ? (m[1] || m[2]) : null
+}
 export const isMissingTable = (err) => Boolean(err) && (err.code === 'PGRST205' || err.code === '42P01'
   || /could not find the table|relation .* does not exist/i.test(err.message || ''))
 
@@ -42,6 +52,7 @@ export async function connectSupabase(env, log = console.log) {
 // ne l'apprendre qu'après le démarrage), pour rattacher les résultats au réseau enregistré par l'agent.
 // Réseau introuvable : network_id reste vide, rien n'est créé ni deviné.
 export function createPusher(client, { gatewayMac = null, log = console.log, now = () => new Date() } = {}) {
+  let r4 = true // passe à false dès que les colonnes source_ip / source_mac manquent
   let r1 = true // passe à false dès qu'une colonne R1 manque : on n'insiste plus
   let network = null
 
@@ -71,7 +82,7 @@ export function createPusher(client, { gatewayMac = null, log = console.log, now
   async function write(rows, r1Columns, op) {
     if (!rows.length) return { error: null }
     let res = await op(r1 ? rows : strip(rows, r1Columns))
-    if (res.error && r1 && isMissingColumn(res.error)) {
+    if (res.error && r1 && isMissingColumn(res.error) && !R4_ALERT_COLUMNS.includes(missingColumnName(res.error))) {
       r1 = false
       log('  (colonnes R1 absentes : envoi réduit ; exécutez supabase/schema_r1_results.sql pour le détail)')
       res = await op(strip(rows, r1Columns))
@@ -90,8 +101,16 @@ export function createPusher(client, { gatewayMac = null, log = console.log, now
       kind: e.type || null,
       network_id: net,
       device_id: (e.ip && ids.get(e.ip)) || null,
+      source_ip: e.ip && IP_IDENTIFIES_OFFENDER.has(e.type) ? e.ip : null,
+      source_mac: e.mac || null,
     }))
-    const { error } = await write(rows, R1_ALERT_COLUMNS, (r) => client.from('alerts').insert(r))
+    const op = (r) => client.from('alerts').insert(r)
+    let { error } = await write(r4 ? rows : strip(rows, R4_ALERT_COLUMNS), R1_ALERT_COLUMNS, op)
+    if (error && r4 && isMissingColumn(error) && R4_ALERT_COLUMNS.includes(missingColumnName(error))) {
+      r4 = false
+      log('  (colonnes R4 absentes : adresse source non envoyée ; exécutez supabase/schema_r4_actions.sql)')
+      ;({ error } = await write(strip(rows, R4_ALERT_COLUMNS), R1_ALERT_COLUMNS, op))
+    }
     if (error) log('⚠ Alertes non envoyées : ' + error.message)
   }
 

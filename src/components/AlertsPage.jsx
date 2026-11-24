@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ALERT_SOURCES, ALERT_STATUS, NETWORK_FILTER_NONE, SEV } from '../constants'
-import { sourceOf } from '../lib/findings.js'
+import { blockState, pickSensorFor, sensorState, sourceOf } from '../lib/findings.js'
 import { useI18n } from '../i18n/context.js'
 import './AlertsPage.css'
 
@@ -23,7 +23,10 @@ const newestFirst = (a, b) => {
 }
 const find = (list, k) => list.find((x) => x.k === k)
 
-export default function AlertsPage({ alerts, networks = [], onUpdate }) {
+const sortByDate = (field) => (a, b) => String(b[field] || '').localeCompare(String(a[field] || ''))
+
+// Le blocage se fait par une demande au capteur (table sensor_commands) : c'est lui qui agit sur le pare-feu Windows.
+export default function AlertsPage({ alerts, networks = [], onUpdate, sensors = [], blocked = [], commands = [], onCommand }) {
   const { t, locale } = useI18n()
   const [sev, setSev] = useState('')
   const [status, setStatus] = useState('')
@@ -57,6 +60,30 @@ export default function AlertsPage({ alerts, networks = [], onUpdate }) {
     } finally {
       setBusyId(null)
     }
+  }
+
+  const sendCommand = async (sensor, kind, params) => {
+    setErr('')
+    setBusyId(params.ip)
+    try {
+      const msg = await onCommand(sensor.id, kind, params)
+      if (msg) setErr(msg)
+    } catch {
+      setErr(t('alertsPage.errUpdate'))
+    } finally {
+      setBusyId(null)
+    }
+  }
+  const blockIp = (a) => {
+    const sensor = pickSensorFor(a, sensors)
+    if (!sensor) return
+    if (!window.confirm(t('blocks.confirmBlock', { ip: a.source_ip, sensor: sensor.name }))) return
+    sendCommand(sensor, 'block_ip', { ip: a.source_ip, reason: String(a.title || '').slice(0, 200), alert_id: a.id, by: 'manual' })
+  }
+  const unblockIp = (ip, sensorId) => {
+    const sensor = sensors.find((x) => x.id === sensorId)
+    if (!sensor || !window.confirm(t('blocks.confirmUnblock', { ip }))) return
+    sendCommand(sensor, 'unblock_ip', { ip })
   }
 
   const acknowledge = (a) => run(a, { status: 'ack', acknowledged_at: new Date().toISOString() })
@@ -104,7 +131,7 @@ export default function AlertsPage({ alerts, networks = [], onUpdate }) {
         <table className="alerts-dt">
           <thead>
             <tr>
-              <th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colNetwork')}</th><th>{t('sources.col')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('alertsPage.colDetail')}</th>
+              <th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colNetwork')}</th><th>{t('sources.col')}</th><th>{t('blocks.colSource')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('alertsPage.colDetail')}</th>
               <th>{t('alertsPage.colCreated')}</th><th>{t('alertsPage.colAck')}</th><th>{t('alertsPage.colResolved')}</th><th>{t('alertsPage.colActions')}</th>
             </tr>
           </thead>
@@ -118,6 +145,11 @@ export default function AlertsPage({ alerts, networks = [], onUpdate }) {
                   <td>{a.title}</td>
                   <td>{networkName(a.network_id)}</td>
                   <td>{ALERT_SOURCES.includes(sourceOf(a)) ? t(`sources.${sourceOf(a)}`) : sourceOf(a)}</td>
+                  <td className="src">
+                    {a.source_ip && <div dir="ltr">{a.source_ip}</div>}
+                    {a.source_mac && <div className="m" dir="ltr" title={a.source_ip ? undefined : t('blocks.macHint')}>{a.source_mac}</div>}
+                    {!a.source_ip && !a.source_mac && '—'}
+                  </td>
                   <td><span style={{ color: s?.color || 'var(--m)' }}>● {s ? t(`sev.${a.severity}`) : (a.severity || '—')}</span></td>
                   <td><span style={{ color: st?.color || 'var(--m)' }}>● {st ? t(`alertStatus.${stateOf(a)}`) : stateOf(a)}</span></td>
                   <td className="detail">{a.detail || '—'}</td>
@@ -125,6 +157,27 @@ export default function AlertsPage({ alerts, networks = [], onUpdate }) {
                   <td>{when(a.acknowledged_at, locale)}</td>
                   <td>{when(a.resolved_at, locale)}</td>
                   <td className="acts">
+                    {a.source_ip && stateOf(a) !== 'resolved' && onCommand && (() => {
+                      const bs = blockState(a.source_ip, blocked, commands)
+                      const sensor = pickSensorFor(a, sensors)
+                      if (bs === 'blocked') {
+                        const row = blocked.find((b) => b.ip === a.source_ip && b.status === 'active')
+                        return (
+                          <>
+                            <span className="blocked-badge">{t('blocks.blockedBadge')}</span>
+                            <button type="button" className="ghost" disabled={busyId === a.source_ip || !sensors.some((x) => x.id === row.sensor_id && sensorState(x).state === 'running')}
+                              aria-label={t('blocks.ariaUnblock', { ip: a.source_ip })} onClick={() => unblockIp(a.source_ip, row.sensor_id)}>{t('blocks.unblock')}</button>
+                          </>
+                        )
+                      }
+                      return (
+                        <button type="button" className="del" disabled={bs === 'pending' || busyId === a.source_ip || !sensor}
+                          title={sensor ? undefined : t('blocks.noSensor')}
+                          aria-label={t('blocks.ariaBlock', { ip: a.source_ip })} onClick={() => blockIp(a)}>
+                          {bs === 'pending' ? t('blocks.pending') : t('blocks.block')}
+                        </button>
+                      )
+                    })()}
                     {stateOf(a) === 'open' && (
                       <button type="button" className="ack" disabled={busy}
                         aria-label={t('alertsPage.ariaAck', { title: a.title })} onClick={() => acknowledge(a)}>
@@ -146,6 +199,46 @@ export default function AlertsPage({ alerts, networks = [], onUpdate }) {
       </div>
       {!alerts.length && <p className="alerts-empty">{t('alertsPage.empty')}</p>}
       {!!alerts.length && !list.length && <p className="alerts-empty">{t('alertsPage.noResult')}</p>}
+
+      {onCommand && (
+        <section className="blocks-panel">
+          <h4>{t('blocks.title')}</h4>
+          <p className="m">{t('blocks.scope')}</p>
+          {!blocked.length ? <p className="m">{t('blocks.empty')}</p> : (
+            <div className="alerts-tw">
+              <table className="alerts-dt">
+                <thead>
+                  <tr><th>{t('blocks.colIp')}</th><th>{t('blocks.colSensor')}</th><th>{t('blocks.colBy')}</th><th>{t('blocks.colReason')}</th><th>{t('alertsPage.colCreated')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('alertsPage.colActions')}</th></tr>
+                </thead>
+                <tbody>
+                  {blocked.slice().sort(sortByDate('blocked_at')).slice(0, 30).map((b) => {
+                    const sensor = sensors.find((x) => x.id === b.sensor_id)
+                    const pending = blockState(b.ip, [], commands) === 'pending'
+                    return (
+                      <tr key={b.id}>
+                        <td dir="ltr">{b.ip}</td>
+                        <td>{sensor ? sensor.name : '—'}</td>
+                        <td>{t(`blocks.by.${b.blocked_by}`)}</td>
+                        <td className="detail">{b.status === 'failed' ? (b.error || b.reason || '—') : (b.reason || '—')}</td>
+                        <td>{when(b.blocked_at, locale)}</td>
+                        <td className={`bst-${b.status}`}>{t(`blocks.status.${b.status}`)}</td>
+                        <td className="acts">
+                          {b.status === 'active' && (
+                            <button type="button" className="ghost" disabled={pending || busyId === b.ip || !sensor || sensorState(sensor).state !== 'running'}
+                              aria-label={t('blocks.ariaUnblock', { ip: b.ip })} onClick={() => unblockIp(b.ip, b.sensor_id)}>
+                              {pending ? t('blocks.pending') : t('blocks.unblock')}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }

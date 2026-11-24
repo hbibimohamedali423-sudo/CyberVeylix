@@ -32,10 +32,15 @@ function Dashboard({ user }) {
   const sen = useRows('sensors', user)
   // Table sensors absente tant que schema_r1_results.sql n'est pas exécuté : pas une panne.
   const sensorsMissing = isMissingTableMessage(sen.error)
+  // Demandes au capteur et adresses bloquées (supabase/schema_r4_actions.sql) : rafraîchies toutes les 5 s.
+  const cmd = useRows('sensor_commands', user, 5000)
+  const blk = useRows('blocked_ips', user, 5000)
+  const r4Missing = isMissingTableMessage(cmd.error) || isMissingTableMessage(blk.error)
+  const sendCommand = (sensorId, kind, params) => cmd.add({ sensor_id: sensorId, kind, params })
   const [modal, setModal] = useState(null)
   const [page, setPage] = useState('home')
   const close = () => setModal(null)
-  const error = dev.error || vul.error || alr.error || thr.error || srv.error || net.error || (sensorsMissing ? '' : sen.error)
+  const error = dev.error || vul.error || alr.error || thr.error || srv.error || net.error || (sensorsMissing ? '' : sen.error) || (r4Missing ? '' : (cmd.error || blk.error))
   const connected = !error
   // Détache explicitement les appareils avant de supprimer un réseau : la suppression reste
   // sans effet destructif même si la contrainte FK réelle n'est pas « on delete set null ».
@@ -93,7 +98,8 @@ function Dashboard({ user }) {
           </main>
         ) : page === 'threats' ? (
           <main className="main wide">
-            <AlertsPage alerts={alr.rows} networks={net.rows} onUpdate={alr.update} />
+            <AlertsPage alerts={alr.rows} networks={net.rows} onUpdate={alr.update}
+              sensors={sen.rows} blocked={r4Missing ? [] : blk.rows} commands={r4Missing ? [] : cmd.rows} onCommand={r4Missing ? undefined : sendCommand} />
           </main>
         ) : page === 'install' ? (
           <main className="main wide">

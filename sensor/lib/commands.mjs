@@ -92,6 +92,7 @@ export function createCommandRunner({ client, sensorName, handlers, log = consol
 
   return {
     tick,
+    getSensorId: findSensorId,
     start() { if (!timer) { tick(); timer = setInterval(tick, pollMs); timer.unref?.() } },
     stop() { if (timer) clearInterval(timer); timer = null },
   }

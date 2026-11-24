@@ -13,6 +13,7 @@ import { vulnReportChecks } from './vuln-report.mjs'
 import { pushChecks } from './push-test.mjs'
 import { webChecks } from './web-test.mjs'
 import { commandsChecks } from './commands-test.mjs'
+import { actionsChecks } from './actions-test.mjs'
 import { parseArp, ARP_REQUEST, ARP_REPLY } from '../lib/parse-arp.mjs'
 import { parseDhcpServerReply, DHCP_OFFER } from '../lib/parse-dhcp.mjs'
 import { createDetectors } from '../lib/detectors.mjs'
@@ -488,6 +489,7 @@ vulnReportChecks(check, checkAsync)
 pushChecks(check, checkAsync)
 webChecks(check, checkAsync)
 commandsChecks(check, checkAsync)
+actionsChecks(check, checkAsync)
 
 // --- Scripts Windows (installateur / désinstallateur) ------------------------
 const sensorFile = (name) => fileURLToPath(new URL(`../${name}`, import.meta.url))

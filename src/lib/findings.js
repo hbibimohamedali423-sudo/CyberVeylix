@@ -36,3 +36,17 @@ export function parseCommandResult(text) {
 
 // Une demande est « active » tant que le capteur ne l'a pas terminée.
 export const isActiveCommand = (c) => c?.status === 'pending' || c?.status === 'running'
+
+// Capteur qui exécutera un blocage pour cette alerte : en service, de préférence sur le réseau de l'alerte.
+export function pickSensorFor(alert, sensors, now = Date.now()) {
+  const running = (sensors || []).filter((s) => sensorState(s, now).state === 'running')
+  return running.find((s) => alert?.network_id && s.network_id === alert.network_id) || running[0] || null
+}
+
+// État du blocage d'une adresse : « blocked » (règle active), « pending » (demande en attente du capteur), « none ».
+export function blockState(ip, blocked = [], commands = []) {
+  if (!ip) return 'none'
+  if (blocked.some((b) => b.ip === ip && b.status === 'active')) return 'blocked'
+  if (commands.some((c) => (c.kind === 'block_ip' || c.kind === 'unblock_ip') && isActiveCommand(c) && c.params?.ip === ip)) return 'pending'
+  return 'none'
+}

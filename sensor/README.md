@@ -89,11 +89,24 @@ Depuis un autre appareil du réseau local : `http://<nom du PC>:8710`.
 Avec l'envoi au tableau de bord (`--push`), le capteur consulte toutes les 5 s la table `sensor_commands`.
 La page « Analyse & Scan » y dépose une demande ; le capteur la réclame (une seule fois), l'exécute lui-même
 et écrit le résultat. Le navigateur n'exécute jamais rien sur le réseau.
-- **Liste blanche** : seule « Analyser maintenant » (`scan_now`) est active dans cette version ; tout autre type
-  (blocage, correction) est refusé explicitement (« non pris en charge »).
+- **Liste blanche** : `scan_now` (analyse), `block_ip` et `unblock_ip` (blocage). Tout autre type (ex. correction)
+  est refusé explicitement (« non pris en charge »).
 - Une demande de plus de 15 minutes n'est pas exécutée (le capteur était éteint) ; une demande « en cours » lors
   d'un redémarrage est marquée en échec.
 - Ne vise que les appareils déjà connus du capteur, réseaux privés uniquement (comme l'analyse périodique).
+
+## Bloquer une adresse
+Dans « Menaces & Incidents », chaque alerte dont l'adresse du fautif est fiable (leurre touché, serveur DHCP pirate,
+nouvel appareil) porte un bouton **Bloquer**. Pour une usurpation de passerelle ou ARP, l'IP annoncée est celle de la
+victime imitée : seule la **MAC** est affichée, pour retrouver l'appareil.
+- Le capteur pose deux règles du **pare-feu Windows de son PC** (`CyberVeylix-Block-<ip>`, entrante et sortante),
+  sans shell, avec une adresse validée strictement. Le débloquage les retire. Cela protège **ce PC**, pas tout le réseau
+  (bloquer au niveau du routeur dépend de son modèle : non fait ici).
+- **Jamais bloquables** : la passerelle, le PC du capteur, le serveur DHCP de confiance, les adresses du tableau de bord
+  (Supabase), la liste `trusted_ips` du capteur, et les adresses 0.x, 127.x, 224.x–255.x.
+- **Blocage automatique** (colonne `sensors.auto_block`, désactivé par défaut) : seulement après un balayage de leurres
+  ou une tentative d'intrusion sur un leurre, 20 blocages par heure au plus, mêmes garde-fous.
+- La table `blocked_ips` est écrite par le capteur (résultat réel du pare-feu) ; les règles survivent au redémarrage.
 
 ## Ce qu'il ne fait pas
 - Il ne bloque rien et n'isole aucun appareil (les leurres observent, ils ne ripostent pas).

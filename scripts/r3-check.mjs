@@ -1,6 +1,6 @@
 // Vérifications de la logique R3 (aucune dépendance) : node scripts/r3-check.mjs
 import assert from 'node:assert/strict'
-import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand } from '../src/lib/findings.js'
+import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand, pickSensorFor, blockState } from '../src/lib/findings.js'
 
 let passed = 0
 const failures = []
@@ -64,6 +64,30 @@ check('commande active : pending et running seulement', () => {
   assert.equal(isActiveCommand({ status: 'running' }), true)
   assert.equal(isActiveCommand({ status: 'done' }), false)
   assert.equal(isActiveCommand(undefined), false)
+})
+
+check('capteur choisi pour un blocage : en service, réseau de l\'alerte en priorité', () => {
+  const now = Date.parse('2026-11-24T12:00:00Z')
+  const hb = (min) => new Date(now - min * 60000).toISOString()
+  const sensors = [
+    { id: 'a', network_id: 'n1', last_heartbeat: hb(1) },
+    { id: 'b', network_id: 'n2', last_heartbeat: hb(2) },
+    { id: 'c', network_id: 'n2', last_heartbeat: hb(120) }, // arrêté
+  ]
+  assert.equal(pickSensorFor({ network_id: 'n2' }, sensors, now).id, 'b')
+  assert.equal(pickSensorFor({ network_id: 'n9' }, sensors, now).id, 'a') // autre réseau : premier en service
+  assert.equal(pickSensorFor({ network_id: 'n2' }, [sensors[2]], now), null) // aucun en service
+  assert.equal(pickSensorFor({}, [], now), null)
+})
+
+check('état du blocage : actif, en attente, aucun', () => {
+  const blocked = [{ ip: '10.0.0.5', status: 'active' }, { ip: '10.0.0.6', status: 'released' }]
+  const cmds = [{ kind: 'block_ip', status: 'pending', params: { ip: '10.0.0.7' } }, { kind: 'block_ip', status: 'done', params: { ip: '10.0.0.8' } }]
+  assert.equal(blockState('10.0.0.5', blocked, cmds), 'blocked')
+  assert.equal(blockState('10.0.0.6', blocked, cmds), 'none') // libérée
+  assert.equal(blockState('10.0.0.7', blocked, cmds), 'pending')
+  assert.equal(blockState('10.0.0.8', blocked, cmds), 'none') // demande terminée
+  assert.equal(blockState(null, blocked, cmds), 'none')
 })
 
 console.log('')
