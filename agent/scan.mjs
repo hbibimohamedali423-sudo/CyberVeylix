@@ -211,7 +211,7 @@ const NO_ALERTS = args.includes('--no-alerts')
 const must = (r) => {
   if (r.error) {
     const hint = /column|relation|schema|constraint|conflict/i.test(r.error.message)
-      ? ' (avez-vous exécuté supabase/schema_scan.sql, schema_hardening.sql, schema_n2_prep.sql et schema_status.sql ?)'
+      ? ' (avez-vous exécuté supabase/schema_scan.sql, schema_hardening.sql, schema_n1_networks.sql, schema_n2_prep.sql et schema_status.sql ?)'
       : ''
     die('Erreur base de données : ' + r.error.message + hint)
   }

@@ -21,7 +21,7 @@ Inventorie les appareils de **votre** réseau local et les envoie à votre compt
 Il ne détecte pas de vulnérabilités (CVE) et ne bloque aucune menace.
 
 ## Utilisation
-1. Exécuter dans Supabase > SQL Editor, dans cet ordre : `supabase/schema_scan.sql`, `supabase/schema_hardening.sql`, puis `supabase/schema_status.sql` (suivi des alertes et vulnérabilités). Vérifier ensuite avec `npm run agent:check`.
+1. Base neuve : exécuter dans Supabase > SQL Editor, dans cet ordre : `supabase/schema.sql`, `schema_alerts.sql`, `schema_scan.sql`, `schema_hardening.sql`, `schema_n1_networks.sql` (réseaux et liens), `schema_n2_prep.sql`, puis `schema_status.sql` (suivi des alertes et vulnérabilités). Les quatre derniers peuvent être relancés sans risque. `schema_n2_hardening.sql` est une **proposition** de durcissement RLS à valider avant exécution. Vérifier ensuite avec `npm run agent:check`.
 2. Copier `agent/.env.example` vers `agent/.env` et le remplir (clé anon uniquement, jamais service_role).
 3. Lancer depuis la racine du projet :
 ```
