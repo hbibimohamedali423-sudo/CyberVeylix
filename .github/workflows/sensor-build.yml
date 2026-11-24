@@ -20,7 +20,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # windows-2022 (Visual Studio 2022) : l'image windows-latest embarque Visual Studio 2026,
+    # que node-gyp ne reconnaît pas encore (« unknown version ») → le module « cap » ne compile pas.
+    runs-on: windows-2022
     permissions:
       contents: write # nécessaire uniquement pour publier la release sur un tag
     steps:
