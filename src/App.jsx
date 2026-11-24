@@ -23,11 +23,21 @@ function Dashboard({ user }) {
   const alr = useRows('alerts', user)
   const thr = useRows('threats', user)
   const srv = useRows('services', user)
+  const net = useRows('networks', user)
   const [modal, setModal] = useState(null)
   const [page, setPage] = useState('home')
   const close = () => setModal(null)
-  const error = dev.error || vul.error || alr.error || thr.error || srv.error
+  const error = dev.error || vul.error || alr.error || thr.error || srv.error || net.error
   const connected = !error
+  // Détache explicitement les appareils avant de supprimer un réseau : la suppression reste
+  // sans effet destructif même si la contrainte FK réelle n'est pas « on delete set null ».
+  const removeNetwork = async (id) => {
+    for (const d of dev.rows.filter((row) => row.network_id === id)) {
+      const msg = await dev.update(d.id, { network_id: null })
+      if (msg) return msg
+    }
+    return net.remove(id)
+  }
   const lastScan = dev.rows.reduce((latest, d) => {
     const t = d.last_seen ? new Date(d.last_seen).getTime() : NaN
     return Number.isFinite(t) && (latest === null || t > latest) ? t : latest
@@ -42,7 +52,7 @@ function Dashboard({ user }) {
         <main className="main">
           <Kpis counts={[dev.loaded ? dev.rows.length : null, thr.loaded ? thr.rows.filter((t) => t.blocked).length : null, vul.loaded ? vul.rows.filter((v) => (v.status || 'open') !== 'resolved').length : null, srv.loaded ? srv.rows.length : null]} />
           <section className="mid">
-            <TopologySummary devices={dev.rows} loaded={dev.loaded} lastScan={lastScan} onOpen={() => setPage('topology')} />
+            <TopologySummary devices={dev.rows} networks={net.rows} loaded={dev.loaded && net.loaded} lastScan={lastScan} onOpen={() => setPage('topology')} />
             <Activity />
           </section>
           <section className="bot">
@@ -54,17 +64,26 @@ function Dashboard({ user }) {
         <RightColumn alerts={alr.rows} threats={thr.rows} onAddAlert={() => setModal('alr')} onAddThreat={() => setModal('thr')} />
         </>) : page === 'devices' ? (
           <main className="main wide">
-            <DevicesPage devices={dev.rows} services={srv.rows} onAddClick={() => setModal('dev')} onUpdate={dev.update} onRemove={dev.remove} />
+            <DevicesPage
+              devices={dev.rows}
+              services={srv.rows}
+              networks={net.rows}
+              onAddClick={() => setModal('dev')}
+              onUpdate={dev.update}
+              onRemove={dev.remove}
+              onNetworkUpdate={net.update}
+              onNetworkRemove={removeNetwork}
+            />
           </main>
         ) : page === 'topology' ? (
-          <TopologyPage devices={dev.rows} services={srv.rows} loaded={dev.loaded} />
+          <TopologyPage devices={dev.rows} services={srv.rows} networks={net.rows} networksLoaded={net.loaded} loaded={dev.loaded} />
         ) : page === 'vulns' ? (
           <main className="main wide">
             <VulnsPage vulns={vul.rows} devices={dev.rows} onAdd={vul.add} onUpdate={vul.update} onRemove={vul.remove} />
           </main>
         ) : page === 'threats' ? (
           <main className="main wide">
-            <AlertsPage alerts={alr.rows} onUpdate={alr.update} />
+            <AlertsPage alerts={alr.rows} networks={net.rows} onUpdate={alr.update} />
           </main>
         ) : (
           <main className="main wide">
@@ -79,9 +98,9 @@ function Dashboard({ user }) {
       {modal === 'dev' && (
         <Modal title={t('modal.devices')} onClose={close}
           fields={[{ k: 'name', ph: t('modal.name') }, { k: 'ip', ph: t('modal.ip') },
-            { k: 'type', opts: Object.keys(TYPES).map((ty) => [ty, t(`type.${ty}`)]) }, { k: 'status', opts: STATUS.map((s) => [s.k, t(`status.${s.k}`)]) }]}
+            { k: 'type', opts: [['', t('type.unknown')], ...Object.keys(TYPES).map((ty) => [ty, t(`type.${ty}`)])] }, { k: 'status', opts: STATUS.map((s) => [s.k, t(`status.${s.k}`)]) }]}
           rows={dev.rows.map((d) => ({ id: d.id, label: `${d.name} · ${d.ip || '—'} · ${d.status ? t(`status.${d.status}`) : '—'}` }))}
-          onAdd={(f) => dev.add({ name: f.name.trim(), ip: f.ip.trim() || null, type: f.type, status: f.status })}
+          onAdd={(f) => dev.add({ name: f.name.trim(), ip: f.ip.trim() || null, type: f.type || null, status: f.status })}
           onRemove={dev.remove} />
       )}
       {modal === 'alr' && (

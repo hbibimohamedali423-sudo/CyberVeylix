@@ -37,8 +37,8 @@ export const DATASETS = [
         d.name,
         d.ip,
         d.mac,
-        // Le type stocké est déjà le libellé français (clé de TYPES).
-        d.type,
+        // Le type stocké est déjà le libellé français (clé de TYPES) ; null reste honnêtement « Inconnu ».
+        d.type || 'Inconnu',
         labelOf(STATUS, d.status) || d.status,
         joined(svc, (s) => s.port),
         joined(svc, (s) => s.service),

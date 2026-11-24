@@ -96,18 +96,7 @@ function Glyph({ type, x = 0, y = 0, size = 16 }) {
   )
 }
 
-/* ── Data helpers (stored values only, no inference beyond the IP prefix) ── */
-const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
-
-function prefixOf(ip) {
-  if (typeof ip !== 'string') return null
-  const m = IPV4.exec(ip.trim())
-  if (!m) return null
-  const octets = m.slice(1, 5).map(Number)
-  if (octets.some((n) => n > 255)) return null
-  return `${octets[0]}.${octets[1]}.${octets[2]}`
-}
-
+/* ── Data helpers (stored values only; network membership comes from networks rows) ── */
 const isRecent = (value) => {
   if (!value) return false
   const ms = new Date(value).getTime()
@@ -187,6 +176,11 @@ function wrapText(value, maxWidth, size = 13.5, maxLines = 2) {
   return { lines: lines.length ? lines : ['—'], truncated }
 }
 
+const clipText = (value, max) => {
+  const text = String(value ?? '')
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
 const zoomed = (view, factor, fit) => {
   const minW = fit.w * 0.2
   const maxW = fit.w * 2.4
@@ -196,37 +190,48 @@ const zoomed = (view, factor, fit) => {
 }
 
 /* ── Graph construction ─────────────────────────────────────────────────── */
-function buildBaseNets(devices) {
-  const byPrefix = new Map()
-  const unknown = []
-  for (const d of devices) {
-    const prefix = prefixOf(d?.ip)
-    if (!prefix) {
-      unknown.push(d)
-      continue
-    }
-    const list = byPrefix.get(prefix)
-    if (list) list.push(d)
-    else byPrefix.set(prefix, [d])
+function buildBaseNets(devices, networks) {
+  const byNetwork = new Map()
+  for (const network of networks) {
+    byNetwork.set(network.id, {
+      key: `network-${network.id}`,
+      network,
+      kind: 'net',
+      devices: [],
+    })
   }
 
-  const nets = [...byPrefix.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }))
-    .map(([prefix, list]) => ({ key: prefix, prefix, kind: 'net', devices: list }))
+  const unassigned = []
+  const unknownNetwork = []
+  for (const d of devices) {
+    if (!d?.network_id) {
+      unassigned.push(d)
+      continue
+    }
+    const network = byNetwork.get(d.network_id)
+    if (network) network.devices.push(d)
+    else unknownNetwork.push(d)
+  }
 
-  // Zero valid IPv4: keep one LAN node, labelled without a prefix.
-  if (!nets.length) nets.push({ key: '__lan', prefix: null, kind: 'net', devices: [] })
-  if (unknown.length) nets.push({ key: '__unknown', prefix: null, kind: 'unknown', devices: unknown })
+  const nets = [...byNetwork.values()]
+    .sort((a, b) => String(a.network.cidr || '').localeCompare(String(b.network.cidr || ''), 'en', { numeric: true }))
+  if (unassigned.length) nets.push({ key: '__unassigned', network: null, kind: 'unassigned', devices: unassigned })
+  // La ligne référencée n'est pas lisible (ou a disparu) : ne jamais la présenter comme « Non assigné ».
+  if (unknownNetwork.length) nets.push({ key: '__unknown-network', network: null, kind: 'unknown', devices: unknownNetwork })
+  // Empty inventory: keep one honest LAN node, without inventing a network or prefix.
+  if (!nets.length) nets.push({ key: '__lan', network: null, kind: 'net', devices: [] })
 
   for (const net of nets) {
     const byType = new Map()
     for (const d of net.devices) {
-      const key = Object.hasOwn(TYPES, d.type) ? d.type : '__other'
+      const key = d.type === null || d.type === undefined || d.type === ''
+        ? '__unknown'
+        : Object.hasOwn(TYPES, d.type) ? d.type : '__other'
       const list = byType.get(key)
       if (list) list.push(d)
       else byType.set(key, [d])
     }
-    net.clusters = [...TYPE_KEYS, '__other']
+    net.clusters = [...TYPE_KEYS, '__unknown', '__other']
       .map((key) => ({
         type: key,
         devices: (byType.get(key) || []).slice()
@@ -309,7 +314,7 @@ function placeNets(baseNets, perRow, clusterCols) {
 }
 
 /* ── Component ─────────────────────────────────────────────────────────── */
-export default function Topology({ devices = [], services = [], loaded = true }) {
+export default function Topology({ devices = [], services = [], networks = [], loaded = true }) {
   const { t } = useI18n()
   const [selected, setSelected] = useState(null)
   const [dragging, setDragging] = useState(false)
@@ -347,12 +352,13 @@ export default function Topology({ devices = [], services = [], loaded = true })
     return () => observer.disconnect()
   }, [hasMap])
 
-  /* One valid /24 per distinct first-three-octets prefix. Devices without a
-     valid IPv4 go to a standalone "unknown address" group (no LAN claim).
-     The per-row count is picked so the fit zooms in as much as the canvas
-     allows instead of scaling readable text down to nothing. */
+  /* Devices are grouped only by their stored network_id / networks row.
+     Devices without network_id go to a standalone "unassigned" group; a
+     non-null reference to a row we cannot read gets its own "unknown network"
+     group. No subnet is ever guessed from the IP. The per-row count is picked
+     so the fit zooms in as much as the canvas allows instead of shrinking text. */
   const layout = useMemo(() => {
-    const base = buildBaseNets(devices)
+    const base = buildBaseNets(devices, networks)
     const candidates = []
     for (const perRow of PER_ROW_OPTIONS) {
       for (const clusterCols of CLUSTER_COL_OPTIONS) {
@@ -375,7 +381,7 @@ export default function Topology({ devices = [], services = [], loaded = true })
       }
     }
     return best
-  }, [devices, mapBox.w, mapBox.h])
+  }, [devices, networks, mapBox.w, mapBox.h])
 
   const fitView = useMemo(() => {
     const w0 = layout.totalW + FIT_PAD_X * 2
@@ -459,6 +465,7 @@ export default function Topology({ devices = [], services = [], loaded = true })
   }
 
   const typeLabel = (type) => {
+    if (type === '__unknown' || type === null || type === undefined || type === '') return t('type.unknown')
     if (type === '__other' || !Object.hasOwn(TYPES, type)) return t('topology.otherType')
     const key = `type.${type}`
     const label = t(key)
@@ -609,31 +616,40 @@ export default function Topology({ devices = [], services = [], loaded = true })
                 </g>
               )}
 
-              {/* LAN nodes */}
-              {layout.nets.filter((net) => net.kind === 'net').map((net) => (
-                <g key={`lan-${net.key}`} className="topo-pill is-lan">
-                  <rect x={net.center - LAN_W / 2} y={LAN_Y} width={LAN_W} height={PILL_H} rx="16" className="topo-pill-bg" />
-                  <Glyph type="__lan" x={net.center - LAN_W / 2 + 18} y={LAN_Y + 17} size={20} />
-                  <text x={net.center - LAN_W / 2 + 46} y={LAN_Y + 26} className="topo-pill-title">
-                    {net.prefix ? `${net.prefix}.0/24` : t('topology.lan')}
-                  </text>
-                  <text x={net.center - LAN_W / 2 + 46} y={LAN_Y + 41} className="topo-pill-meta">
-                    {net.devices.length} {deviceWord(net.devices.length)}
-                  </text>
-                </g>
-              ))}
+              {/* LAN nodes: labels come from the real networks rows, never from an IP guess. */}
+              {layout.nets.filter((net) => net.kind === 'net').map((net) => {
+                const name = net.network ? (net.network.name || net.network.cidr) : t('topology.lan')
+                const meta = net.network
+                  ? `${net.network.cidr || '—'} · ${net.devices.length} ${deviceWord(net.devices.length)}`
+                  : `${net.devices.length} ${deviceWord(net.devices.length)}`
+                return (
+                  <g key={`lan-${net.key}`} className="topo-pill is-lan">
+                    <rect x={net.center - LAN_W / 2} y={LAN_Y} width={LAN_W} height={PILL_H} rx="16" className="topo-pill-bg" />
+                    <Glyph type="__lan" x={net.center - LAN_W / 2 + 18} y={LAN_Y + 17} size={20} />
+                    <text x={net.center - LAN_W / 2 + 46} y={LAN_Y + 26} className="topo-pill-title">
+                      {clipText(name, 22)}
+                    </text>
+                    <text x={net.center - LAN_W / 2 + 46} y={LAN_Y + 41} className="topo-pill-meta">
+                      {clipText(meta, 28)}
+                    </text>
+                  </g>
+                )
+              })}
 
-              {/* Devices without a valid IPv4: standalone group, no LAN claim */}
-              {layout.nets.filter((net) => net.kind === 'unknown').map((net) => (
-                <g key={`unknown-${net.key}`} className="topo-pill is-unknown">
-                  <rect x={net.center - UNKNOWN_W / 2} y={LAN_Y} width={UNKNOWN_W} height={PILL_H} rx="16" className="topo-pill-bg" />
-                  <Glyph type="__question" x={net.center - UNKNOWN_W / 2 + 18} y={LAN_Y + 17} size={20} />
-                  <text x={net.center - UNKNOWN_W / 2 + 46} y={LAN_Y + 26} className="topo-pill-title">{t('topology.lanUnknown')}</text>
-                  <text x={net.center - UNKNOWN_W / 2 + 46} y={LAN_Y + 41} className="topo-pill-meta">
-                    {net.devices.length} {deviceWord(net.devices.length)}
-                  </text>
-                </g>
-              ))}
+              {/* Devices without network_id (and references to an unreadable network) never claim a LAN or subnet. */}
+              {layout.nets.filter((net) => net.kind === 'unassigned' || net.kind === 'unknown').map((net) => {
+                const label = net.kind === 'unknown' ? t('networks.unknown') : t('topology.unassigned')
+                return (
+                  <g key={`${net.kind}-${net.key}`} className="topo-pill is-unknown">
+                    <rect x={net.center - UNKNOWN_W / 2} y={LAN_Y} width={UNKNOWN_W} height={PILL_H} rx="16" className="topo-pill-bg" />
+                    <Glyph type="__question" x={net.center - UNKNOWN_W / 2 + 18} y={LAN_Y + 17} size={20} />
+                    <text x={net.center - UNKNOWN_W / 2 + 46} y={LAN_Y + 26} className="topo-pill-title">{label}</text>
+                    <text x={net.center - UNKNOWN_W / 2 + 46} y={LAN_Y + 41} className="topo-pill-meta">
+                      {net.devices.length} {deviceWord(net.devices.length)}
+                    </text>
+                  </g>
+                )
+              })}
 
               {/* Cluster headings, cluster→card membership lines, device cards */}
               {layout.nets.map((net) => net.clusters.map((cluster) => {
@@ -781,11 +797,11 @@ export default function Topology({ devices = [], services = [], loaded = true })
                             setSelected((previous) => (previous === d.id ? null : d.id))
                           }}
                         >
-                          <title>{`${rawName || ip || '—'} — ${ip || '—'}`}</title>
+                          <title>{`${rawName || ip || '—'} — ${ip || '—'} — ${typeLabel(d.type)}`}</title>
                           <rect x={x - 2} y={y - 2} width={LEAF_W + 4} height={LEAF_H + 4} rx="16" className="topo-leaf-halo" />
                           <rect x={x} y={y} width={LEAF_W} height={LEAF_H} rx="14" className="topo-leaf-bg" />
                           <rect x={x + 10} y={y + 10} width="28" height="28" rx="9" className="topo-leaf-icon-bg" />
-                          <Glyph type={Object.hasOwn(TYPES, d.type) ? d.type : '__other'} x={x + 15.5} y={y + 15.5} size={17} />
+                          <Glyph type={d.type === null || d.type === undefined || d.type === '' ? '__question' : Object.hasOwn(TYPES, d.type) ? d.type : '__other'} x={x + 15.5} y={y + 15.5} size={17} />
                           <text x={x + 46} y={nameTop} className="topo-leaf-name" style={{ fontSize: nameSize }}>
                             {nameFit.lines.map((line, index) => (
                               <tspan key={index} x={x + 46} y={nameTop + index * nameStep}>{line}</tspan>
@@ -838,7 +854,7 @@ export default function Topology({ devices = [], services = [], loaded = true })
           </div>
 
           <div className="topo-foot">
-            <span>{t('topology.typeEstimated')}</span>
+            <span>{t('topology.typeStored')}</span>
             <span>{t('topology.statusSource')}</span>
           </div>
         </>

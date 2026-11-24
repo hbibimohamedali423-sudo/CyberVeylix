@@ -10,6 +10,8 @@ export const KPIS = [
 export const TYPES = { 'Serveur': 'var(--type-server)', 'Poste': 'var(--type-workstation)', 'Caméra': 'var(--type-camera)', 'Équipement réseau': 'var(--type-network)', 'Accès Internet': 'var(--type-internet)' }
 // Ports jugés sensibles par l’agent de découverte (même liste que agent/scan.mjs, SENSITIVE).
 export const SENSITIVE_PORTS = [21, 23, 3389, 5900, 1433, 3306, 5432]
+// Valeur de filtre réservée aux lignes dont network_id est null.
+export const NETWORK_FILTER_NONE = '__network_none'
 export const STATUS = [
   { k: 'on', label: 'En ligne', color: 'var(--status-on)' },
   { k: 'off', label: 'Hors ligne', color: 'var(--status-off)' },

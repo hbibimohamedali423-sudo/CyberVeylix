@@ -1,25 +1,11 @@
 import { useI18n } from '../i18n/context.js'
 import './TopologySummary.css'
 
-const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
-
-function prefixOf(ip) {
-  if (typeof ip !== 'string') return null
-  const m = IPV4.exec(ip.trim())
-  if (!m) return null
-  const octets = m.slice(1, 5).map(Number)
-  if (octets.some((n) => n > 255)) return null
-  return `${octets[0]}.${octets[1]}.${octets[2]}`
-}
-
-export default function TopologySummary({ devices = [], loaded = true, lastScan = null, onOpen }) {
+export default function TopologySummary({ devices = [], networks = [], loaded = true, lastScan = null, onOpen }) {
   const { t, locale } = useI18n()
-  const subnets = new Set()
   let online = 0
 
   for (const device of devices) {
-    const prefix = prefixOf(device.ip)
-    if (prefix) subnets.add(prefix)
     if (device.status === 'on') online += 1
   }
 
@@ -43,7 +29,7 @@ export default function TopologySummary({ devices = [], loaded = true, lastScan 
         <>
           <dl className="ts-stats">
             <div><dt>{t('topologySummary.devices')}</dt><dd>{devices.length}</dd></div>
-            <div><dt>{t('topologySummary.subnets')}</dt><dd>{subnets.size}</dd></div>
+            <div><dt>{t('topologySummary.networks')}</dt><dd>{networks.length}</dd></div>
             <div><dt>{t('topologySummary.online')}</dt><dd>{online}</dd></div>
             <div><dt>{t('topologySummary.lastScan')}</dt><dd className="ts-date">{scanLabel}</dd></div>
           </dl>

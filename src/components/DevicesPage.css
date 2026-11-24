@@ -1,15 +1,59 @@
 .wide{grid-column:2 / -1}
-.tb{display:flex;gap:10px;margin:12px 0}
-.tb input{flex:1;margin:0}
+.tb{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0;align-items:end}
+.tb input{flex:1;min-width:220px;margin:0}
 .tb select{width:180px;margin:0}
 .tb button{width:auto;margin:0;padding:9px 16px;white-space:nowrap}
+.tb-network{display:flex;flex-direction:column;gap:4px;color:var(--m);font-size:11px}
+.tb-network select{width:200px}
 .tw{overflow-x:auto}
 .dt{width:100%;border-collapse:collapse;font-size:13px}
-.dt thead th{text-align:start;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b)}
+.dt thead th{text-align:start;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b);white-space:nowrap}
 .dt tbody td{text-align:start;color:var(--t);padding:10px 8px;border-bottom:1px solid var(--row-border)}
 .dt input,.dt select{margin:0;padding:5px 6px;font-size:12px;width:100%;min-width:90px}
 .dt button{width:auto;margin:0;margin-inline-end:6px;padding:4px 10px;font-size:12px}
 .dt button.x{background:var(--surface2);color:var(--t)}
 .dt button.del{background:var(--danger-bg);color:var(--t)}
 .err{color:var(--danger-ink);margin:6px 0;font-size:12px}
-@media(max-width:1100px){.wide{grid-column:auto}.tb{flex-wrap:wrap}.tb select{width:100%}}
+
+/* ── N2 : networks, assignment and manager ── */
+.net-unassigned,.net-manager{margin-top:18px;padding-top:16px;border-top:1px solid var(--border-soft)}
+.net-panel-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}
+.net-panel-head h4{margin:0;color:var(--t);font-size:14px}
+.net-panel-head p{margin:3px 0 0}
+.net-bulk{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0 12px}
+.net-bulk select{width:220px;margin:0}
+.net-bulk button{width:auto;margin:0;padding:8px 12px}
+.net-check{display:inline-flex;align-items:center;gap:7px;color:var(--m);font-size:11px;white-space:nowrap}
+.net-check input[type="checkbox"],.net-unassigned-row>input[type="checkbox"]{width:auto;min-width:0;margin:0;accent-color:var(--primary)}
+.net-unassigned-list{display:grid;gap:8px}
+.net-unassigned-row{display:grid;grid-template-columns:auto minmax(130px,1fr) minmax(150px,220px) auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border-soft);border-radius:8px;background:var(--surface)}
+.net-unassigned-row select{margin:0;width:100%;font-size:12px;padding:6px 8px}
+.net-unassigned-row button{width:auto;margin:0;padding:6px 10px;font-size:12px}
+.net-unassigned-name{min-width:0}
+.net-unassigned-name b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.net-unassigned-name small{display:block;color:var(--m)}
+.net-ok{color:var(--success-ink);margin:4px 0 8px;font-size:12px}
+.net-tw{overflow-x:auto}
+.net-table{width:100%;border-collapse:collapse;font-size:12px}
+.net-table th{text-align:start;color:var(--m);font-weight:500;font-size:11px;padding:8px;border-bottom:1px solid var(--b);white-space:nowrap}
+.net-table td{text-align:start;color:var(--t);padding:9px 8px;border-bottom:1px solid var(--row-border);vertical-align:middle}
+.net-table td input[type="text"],.net-table td input:not([type]){margin:0;padding:6px 8px;font-size:12px;min-width:140px;width:100%}
+.net-actions{white-space:nowrap}
+.net-actions button{width:auto;margin:0;margin-inline-end:6px;margin-block-end:4px;padding:4px 10px;font-size:12px}
+.net-actions button.x{background:var(--surface2);color:var(--t)}
+.net-actions button.del{background:var(--danger-bg);color:var(--t)}
+.net-empty{margin:8px 0 0}
+[data-theme="light"] .net-unassigned-row{background:var(--input-bg)}
+[data-theme="light"] .net-check input[type="checkbox"]{accent-color:var(--primary)}
+[data-theme="light"] .net-table th{background:var(--table-head)}
+[data-theme="light"] .net-table tbody tr:nth-child(even) td{background:var(--row-alt)}
+[data-theme="light"] .net-table tbody tr:hover td{background:var(--row-hover)}
+@media(max-width:1100px){.wide{grid-column:auto}.tb select{width:100%}.tb-network{flex:1}.tb-network select{width:100%}}
+@media(max-width:560px){
+  .tb input{min-width:0;flex-basis:100%}
+  .tb button{flex:1}
+  .net-unassigned-row{grid-template-columns:auto 1fr;align-items:start}
+  .net-unassigned-row select,.net-unassigned-row button{grid-column:2}
+  .net-bulk select{width:100%}
+  .net-bulk button{width:100%}
+}

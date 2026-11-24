@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ALERT_STATUS, SEV } from '../constants'
+import { ALERT_STATUS, NETWORK_FILTER_NONE, SEV } from '../constants'
 import { useI18n } from '../i18n/context.js'
 import './AlertsPage.css'
 
@@ -22,15 +22,25 @@ const newestFirst = (a, b) => {
 }
 const find = (list, k) => list.find((x) => x.k === k)
 
-export default function AlertsPage({ alerts, onUpdate }) {
+export default function AlertsPage({ alerts, networks = [], onUpdate }) {
   const { t, locale } = useI18n()
   const [sev, setSev] = useState('')
   const [status, setStatus] = useState('')
+  const [networkFilter, setNetworkFilter] = useState('')
   const [err, setErr] = useState('')
   const [busyId, setBusyId] = useState(null)
 
+  const networkName = (id) => {
+    if (!id) return t('networks.noNetwork')
+    const network = networks.find((n) => n.id === id)
+    return network ? (network.name || network.cidr) : t('networks.unknown')
+  }
+
   const list = alerts
-    .filter((a) => (!sev || a.severity === sev) && (!status || stateOf(a) === status))
+    .filter((a) => (!sev || a.severity === sev)
+      && (!status || stateOf(a) === status)
+      && (!networkFilter
+        || (networkFilter === NETWORK_FILTER_NONE ? !a.network_id : a.network_id === networkFilter)))
     .sort(newestFirst)
 
   const run = async (a, patch) => {
@@ -72,13 +82,20 @@ export default function AlertsPage({ alerts, onUpdate }) {
             {ALERT_STATUS.map((s) => <option key={s.k} value={s.k}>{t(`alertStatus.${s.k}`)}</option>)}
           </select>
         </label>
+        <label>{t('alertsPage.networkFilter')}
+          <select value={networkFilter} onChange={(e) => setNetworkFilter(e.target.value)}>
+            <option value="">{t('networks.all')}</option>
+            {networks.map((n) => <option key={n.id} value={n.id}>{n.name || n.cidr}</option>)}
+            <option value={NETWORK_FILTER_NONE}>{t('networks.noNetwork')}</option>
+          </select>
+        </label>
       </div>
       {err && <div className="alerts-err" role="alert">{err}</div>}
       <div className="alerts-tw">
         <table className="alerts-dt">
           <thead>
             <tr>
-              <th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('alertsPage.colDetail')}</th>
+              <th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colNetwork')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('alertsPage.colDetail')}</th>
               <th>{t('alertsPage.colCreated')}</th><th>{t('alertsPage.colAck')}</th><th>{t('alertsPage.colResolved')}</th><th>{t('alertsPage.colActions')}</th>
             </tr>
           </thead>
@@ -90,6 +107,7 @@ export default function AlertsPage({ alerts, onUpdate }) {
               return (
                 <tr key={a.id}>
                   <td>{a.title}</td>
+                  <td>{networkName(a.network_id)}</td>
                   <td><span style={{ color: s?.color || 'var(--m)' }}>● {s ? t(`sev.${a.severity}`) : (a.severity || '—')}</span></td>
                   <td><span style={{ color: st?.color || 'var(--m)' }}>● {st ? t(`alertStatus.${stateOf(a)}`) : stateOf(a)}</span></td>
                   <td className="detail">{a.detail || '—'}</td>

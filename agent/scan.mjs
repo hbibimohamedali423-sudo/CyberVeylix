@@ -4,6 +4,7 @@ import os from 'node:os'
 import dns from 'node:dns/promises'
 import { execFile, spawnSync } from 'node:child_process'
 import { promisify } from 'node:util'
+import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 
 const run = promisify(execFile)
@@ -54,7 +55,11 @@ function parseCidr(c) {
   if (!priv) die('Refusé : seules les plages privées (10/8, 172.16/12, 192.168/16) peuvent être scannées.')
   const hosts = []
   for (let i = base + 1; i < base + size - 1; i++) hosts.push(toIp(i))
-  return { hosts, inRange: (ip) => { const n = toInt(ip); return n > base && n < base + size - 1 } }
+  return {
+    cidr: `${toIp(base)}/${bits}`,
+    hosts,
+    inRange: (ip) => { const n = toInt(ip); return n > base && n < base + size - 1 },
+  }
 }
 
 async function pool(items, n, fn) {
@@ -74,19 +79,102 @@ async function ping(ip) {
   } catch { return false }
 }
 
+const normalizeMac = (value) => String(value || '').trim().toLowerCase().replaceAll('-', ':')
+
+function addArpLine(map, line) {
+  const r = /(\d+\.\d+\.\d+\.\d+)\D+((?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2})/i.exec(line)
+  if (!r) return
+  const mac = normalizeMac(r[2])
+  if (!mac || mac === 'ff:ff:ff:ff:ff:ff' || mac === '00:00:00:00:00:00') return
+  if (mac.startsWith('01:00:5e') || mac.startsWith('33:33')) return
+  map.set(r[1], mac)
+}
+
 async function arpTable() {
-  const m = new Map()
+  const map = new Map()
   try {
-    const { stdout } = await run('arp', ['-a'], { timeout: 5000 })
-    for (const line of stdout.split('\n')) {
-      const r = /(\d+\.\d+\.\d+\.\d+)\D+((?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2})/i.exec(line)
-      if (!r) continue
-      const mac = r[2].toLowerCase().replaceAll('-', ':')
-      if (mac === 'ff:ff:ff:ff:ff:ff' || mac.startsWith('01:00:5e')) continue
-      m.set(r[1], mac)
-    }
+    const { stdout } = await run('arp', ['-a'], { timeout: 5000, maxBuffer: 1_000_000 })
+    for (const line of stdout.split(/\r?\n/)) addArpLine(map, line)
   } catch { /* arp indisponible */ }
-  return m
+  if (!WIN) {
+    try {
+      const { stdout } = await run('ip', ['neigh', 'show'], { timeout: 5000, maxBuffer: 1_000_000 })
+      for (const line of stdout.split(/\r?\n/)) addArpLine(map, line)
+    } catch { /* ip neigh indisponible */ }
+  }
+  return map
+}
+
+function defaultGatewayFromRoute(stdout) {
+  let best = null
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = /^\s*0\.0\.0\.0\s+0\.0\.0\.0\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\S+\s+(\d+)/.exec(line)
+    if (!m) continue
+    const metric = Number(m[2])
+    if (!best || metric < best.metric) best = { ip: m[1], metric }
+  }
+  return best?.ip || null
+}
+
+async function defaultGateway() {
+  try {
+    if (WIN) {
+      const { stdout } = await run('route', ['print', '-4'], { timeout: 5000, maxBuffer: 1_000_000 })
+      const ip = defaultGatewayFromRoute(stdout)
+      if (ip) return ip
+      const fallback = await run('route', ['print'], { timeout: 5000, maxBuffer: 1_000_000 })
+      return defaultGatewayFromRoute(fallback.stdout)
+    }
+    const { stdout } = await run('ip', ['route', 'show', 'default'], { timeout: 5000, maxBuffer: 1_000_000 })
+    const m = /default\s+via\s+(\d{1,3}(?:\.\d{1,3}){3})/.exec(stdout)
+    return m?.[1] || null
+  } catch {
+    return null
+  }
+}
+
+async function ssidName() {
+  if (WIN) {
+    try {
+      const { stdout } = await run('netsh', ['wlan', 'show', 'interfaces'], { timeout: 5000, maxBuffer: 1_000_000 })
+      const m = /^\s*SSID\s*:\s*(.+?)\s*$/im.exec(stdout)
+      const value = m?.[1]?.trim()
+      if (value) return value
+    } catch { /* netsh indisponible */ }
+    return null
+  }
+  try {
+    const { stdout } = await run('iwgetid', ['-r'], { timeout: 5000, maxBuffer: 100_000 })
+    const value = stdout.trim()
+    if (value) return value
+  } catch { /* iwgetid indisponible */ }
+  try {
+    const { stdout } = await run('nmcli', ['-t', '-f', 'active,ssid', 'dev', 'wifi'], { timeout: 5000, maxBuffer: 500_000 })
+    const line = stdout.split(/\r?\n/).find((x) => x.startsWith('yes:'))
+    const value = line?.slice(4).trim()
+    if (value) return value
+  } catch { /* nmcli indisponible */ }
+  return null
+}
+
+const fingerprintOf = (cidr, gatewayMac) =>
+  createHash('sha256').update(`${cidr}|${gatewayMac || ''}`).digest('hex').slice(0, 8)
+
+async function detectNetworkIdentity() {
+  const gatewayIp = await defaultGateway()
+  if (gatewayIp) await ping(gatewayIp)
+  const arp = await arpTable()
+  const gatewayMac = gatewayIp ? arp.get(gatewayIp) || null : null
+  const ssid = await ssidName()
+  if (!gatewayMac && !ssid) {
+    die('Identité du réseau introuvable : ni la MAC de la passerelle ni le SSID Wi-Fi ne sont disponibles. '
+      + 'Scan annulé : aucune donnée n’a été écrite.')
+  }
+  if (!gatewayMac) {
+    console.warn('⚠ WARNING : MAC de passerelle indisponible. Le SSID est utilisé comme identité de secours : '
+      + 'cette identité est faible (SSID réutilisable ou masqué).')
+  }
+  return { gatewayIp, gatewayMac, ssid, arp }
 }
 
 const probe = (host, port, ms = 800) => new Promise((res) => {
@@ -110,12 +198,6 @@ async function hostname(ip) {
   } catch { return null }
 }
 
-const guessType = (p) =>
-  p.includes(554) ? 'Caméra'
-    : p.some((x) => [3389, 445, 135, 139].includes(x)) ? 'Poste'
-      : p.some((x) => [22, 80, 443, 53, 3306, 5432, 1433, 8080, 8443].includes(x)) ? 'Serveur'
-        : 'Poste'
-
 const SENSITIVE = {
   21: ['h', 'FTP, non chiffré'],
   23: ['h', 'Telnet, non chiffré'],
@@ -130,7 +212,7 @@ const NO_ALERTS = args.includes('--no-alerts')
 const must = (r) => {
   if (r.error) {
     const hint = /column|relation|schema|constraint|conflict/i.test(r.error.message)
-      ? ' (avez-vous exécuté supabase/schema_scan.sql puis supabase/schema_hardening.sql ?)'
+      ? ' (avez-vous exécuté supabase/schema_scan.sql, schema_hardening.sql et schema_n2_prep.sql ?)'
       : ''
     die('Erreur base de données : ' + r.error.message + hint)
   }
@@ -165,18 +247,23 @@ if (CHECK) {
   console.log(`Serveur : ${env.SUPABASE_URL}`)
   await login()
   console.log('Connexion Supabase : OK')
-  const d = await sb.from('devices').select('id', { count: 'exact', head: true })
-  console.log(d.error ? '✖ Table devices : ' + d.error.message : `Table devices : OK (${d.count} appareil(s))`)
+  const n = await sb.from('networks')
+    .select('id,user_id,name,cidr,gateway_ip,gateway_mac,ssid,scan_allowed,last_seen', { count: 'exact', head: true })
+  console.log(n.error ? '✖ Table networks : ' + n.error.message : `Table networks : OK (${n.count} réseau(x))`)
+  const d = await sb.from('devices')
+    .select('network_id,type,role,role_evidence,discovery_source', { count: 'exact', head: true })
+  console.log(d.error ? '✖ Table devices (colonnes N2) : ' + d.error.message : `Table devices (colonnes N2) : OK (${d.count} appareil(s))`)
   const v = await sb.from('services').select('id', { count: 'exact', head: true })
   console.log(v.error ? '✖ Table services : ' + v.error.message + ' (exécutez supabase/schema_scan.sql)' : 'Table services : OK')
-  const a = await sb.from('alerts').select('device_id', { count: 'exact', head: true })
-  console.log(a.error ? '✖ Table alerts : ' + a.error.message + ' (exécutez supabase/schema_hardening.sql)' : 'Table alerts (device_id) : OK')
+  const a = await sb.from('alerts')
+    .select('network_id,device_id', { count: 'exact', head: true })
+  console.log(a.error ? '✖ Table alerts (network_id, device_id) : ' + a.error.message + ' (exécutez supabase/schema_n2_prep.sql)' : 'Table alerts (network_id, device_id) : OK')
   await sb.auth.signOut()
   process.exit(0)
 }
 
-const { hosts, inRange } = parseCidr(CIDR)
-console.log(`Réseau ${CIDR} — ${hosts.length} adresses`)
+const { cidr: NET_CIDR, hosts, inRange } = parseCidr(CIDR)
+console.log(`Réseau ${NET_CIDR} — ${hosts.length} adresses`)
 
 // --local-only : pour les lancements automatiques. Si cet ordinateur n'est pas sur le réseau cible
 // (autre Wi-Fi, déplacement), on ne scanne rien et on ne modifie aucune donnée.
@@ -189,7 +276,66 @@ if (args.includes('--local-only')) {
   }
 }
 
+// L'identité réseau est vérifiée AVANT toute écriture. Sans MAC de passerelle ni SSID,
+// le scan est refusé : on ne crée ni ne scanne un réseau non identifiable.
+const identity = await detectNetworkIdentity()
+const fingerprint = fingerprintOf(NET_CIDR, identity.gatewayMac)
+console.log(`Empreinte réseau : ${fingerprint}${identity.gatewayMac ? '' : ' (identité SSID, faible)'}`)
+
 await login()
+
+async function findNetworkRows({ cidr, gatewayMac, ssid, weakOnly = false }) {
+  if (gatewayMac) {
+    // La MAC peut avoir été saisie avec des tirets ou en majuscules : on compare sous forme normalisée.
+    const rows = must(await sb.from('networks').select('*').eq('cidr', cidr)) || []
+    return rows.filter((n) => normalizeMac(n.gateway_mac) === gatewayMac)
+  }
+  if (ssid) {
+    let query = sb.from('networks').select('*').eq('cidr', cidr)
+    if (weakOnly) query = query.is('gateway_mac', null)
+    return must(await query.eq('ssid', ssid)) || []
+  }
+  return []
+}
+
+let network
+{
+  const now = new Date().toISOString()
+  let rows = await findNetworkRows({ cidr: NET_CIDR, gatewayMac: identity.gatewayMac, ssid: identity.ssid })
+  // Une ancienne ligne créée en secours SSID peut être enrichie avec la MAC désormais connue.
+  if (!rows.length && identity.gatewayMac && identity.ssid) {
+    const weak = await findNetworkRows({ cidr: NET_CIDR, gatewayMac: null, ssid: identity.ssid, weakOnly: true })
+    if (weak.length === 1) rows = weak
+  }
+
+  if (!rows.length) {
+    const created = await sb.from('networks').insert({
+      name: identity.ssid || NET_CIDR,
+      cidr: NET_CIDR,
+      gateway_ip: identity.gatewayIp,
+      gateway_mac: identity.gatewayMac,
+      ssid: identity.ssid,
+      scan_allowed: true,
+      last_seen: now,
+    }).select('*').single()
+    network = must(created)
+    console.log(`Nouveau réseau : ${network.name} — ${network.cidr}`)
+  } else {
+    network = rows[0]
+    if (network.scan_allowed !== true) {
+      console.log(`Scan désactivé pour le réseau « ${network.name} » (${network.cidr}) : aucune donnée modifiée.`)
+      await sb.auth.signOut()
+      process.exit(0)
+    }
+    const patch = { last_seen: now }
+    if (!network.gateway_ip && identity.gatewayIp) patch.gateway_ip = identity.gatewayIp
+    if (!network.ssid && identity.ssid) patch.ssid = identity.ssid
+    if (!network.gateway_mac && identity.gatewayMac) patch.gateway_mac = identity.gatewayMac
+    network = { ...network, ...patch }
+    must(await sb.from('networks').update(patch).eq('id', network.id))
+    console.log(`Réseau existant : ${network.name} — ${network.cidr}`)
+  }
+}
 
 console.log('1/3 Découverte (ping + ARP)…')
 const up = new Set((await pool(hosts, 50, async (ip) => ((await ping(ip)) ? ip : null))).filter(Boolean))
@@ -204,39 +350,83 @@ const alive = await pool([...up].sort((a, b) => toInt(a) - toInt(b)), 8, async (
 for (const h of alive) console.log(`    ${h.ip.padEnd(15)} ${(h.name || '-').padEnd(20)} ${h.ports.join(',') || '-'}`)
 
 console.log('3/3 Enregistrement…')
-const existing = must(await sb.from('devices').select('id,ip,status,last_seen')) || []
+const existing = must(await sb.from('devices').select('*').eq('network_id', network.id)) || []
+const unassigned = must(await sb.from('devices').select('id,ip').is('network_id', null)) || []
+const unassignedIps = new Set(unassigned.map((d) => d.ip).filter(Boolean))
 const byIp = new Map()
-for (const d of existing) if (d.ip && !byIp.has(d.ip)) byIp.set(d.ip, d)
+const byMac = new Map()
+for (const d of existing) {
+  if (d.ip && !byIp.has(d.ip)) byIp.set(d.ip, d)
+  if (d.mac) {
+    const mac = normalizeMac(d.mac)
+    if (!byMac.has(mac)) byMac.set(mac, d)
+  }
+}
+const claimed = new Set()
 const now = new Date().toISOString()
-// Premier inventaire de cette plage : on enregistre tout comme référence, sans créer d'alertes.
-const baseline = !existing.some((d) => d.ip && inRange(d.ip))
+// Premier inventaire de CE réseau : on enregistre tout comme référence, sans créer d'alertes.
+const baseline = existing.length === 0
 const alerts = []
+const seenIds = new Set()
 
 for (const h of alive) {
-  const ex = byIp.get(h.ip)
+  let ex = null
+  if (h.mac) {
+    const byMacMatch = byMac.get(h.mac)
+    if (byMacMatch && !claimed.has(byMacMatch.id)) ex = byMacMatch
+  }
+  if (!ex) {
+    const byIpMatch = byIp.get(h.ip)
+    if (byIpMatch && !claimed.has(byIpMatch.id)) ex = byIpMatch
+  }
   const who = `${h.ip}${h.name ? ' — ' + h.name : ''}`
+  const candidate = unassignedIps.has(h.ip)
+  // Ne jamais adopter une ligne network_id = null et ne pas créer de doublon :
+  // le propriétaire l'assigne dans l'interface, puis le prochain scan la retrouve.
+  if (!ex && candidate) {
+    console.log(`    Candidat non assigné : ${h.ip}`)
+    continue
+  }
   let id
   let prev = []
   if (ex) {
+    claimed.add(ex.id)
+    seenIds.add(ex.id)
+    const patch = { status: 'on', last_seen: now }
     // La MAC n'est remplacée que si elle a été lue, pour ne pas effacer une valeur déjà connue.
-    must(await sb.from('devices')
-      .update({ status: 'on', last_seen: now, ...(h.mac ? { mac: h.mac } : {}) })
-      .eq('id', ex.id))
+    if (h.mac) patch.mac = h.mac
+    if (!ex.discovery_source) patch.discovery_source = 'agent'
+    must(await sb.from('devices').update(patch).eq('id', ex.id))
     id = ex.id
     prev = (must(await sb.from('services').select('port').eq('device_id', id)) || []).map((x) => x.port)
   } else {
     id = must(await sb.from('devices')
-      .insert({ name: h.name || h.ip, ip: h.ip, mac: h.mac, type: guessType(h.ports), status: 'on', last_seen: now })
+      .insert({
+        name: h.name || h.ip,
+        ip: h.ip,
+        mac: h.mac,
+        network_id: network.id,
+        // Aucun type deviné : null reste « inconnu » tant que l'utilisateur ne renseigne pas.
+        type: null,
+        role: null,
+        status: 'on',
+        last_seen: now,
+        discovery_source: 'agent',
+      })
       .select('id').single()).id
+    claimed.add(id)
+    seenIds.add(id)
     if (!baseline) {
       alerts.push({
         title: 'Nouvel appareil détecté',
-        detail: `${who}${h.mac ? ' (' + h.mac + ')' : ''}`,
+        detail: who,
         severity: 'm',
         device_id: id,
+        network_id: network.id,
       })
     }
   }
+  if (unassignedIps.has(h.ip)) console.log(`    Candidat non assigné : ${h.ip}`)
   if (!baseline) {
     for (const p of h.ports) {
       if (SENSITIVE[p] && !prev.includes(p)) {
@@ -245,6 +435,7 @@ for (const h of alive) {
           detail: who,
           severity: SENSITIVE[p][0],
           device_id: id,
+          network_id: network.id,
         })
       }
     }
@@ -263,7 +454,6 @@ for (const h of alive) {
   }
 }
 
-const seen = new Set(alive.map((h) => h.ip))
 // Un appareil absent n'est déclaré « Hors ligne » qu'après 90 minutes sans être vu
 // (évite le va-et-vient des téléphones et objets connectés qui s'endorment entre deux scans).
 const GRACE_MS = 90 * 60 * 1000
@@ -271,9 +461,9 @@ const lastSeenMs = (d) => (d.last_seen ? new Date(d.last_seen).getTime() : 0)
 let off = 0
 let pending = 0
 for (const d of existing) {
-  if (d.ip && inRange(d.ip) && !seen.has(d.ip) && d.status !== 'off') {
+  if (d.ip && inRange(d.ip) && !seenIds.has(d.id) && d.status !== 'off') {
     if (Date.now() - lastSeenMs(d) > GRACE_MS) {
-      must(await sb.from('devices').update({ status: 'off' }).eq('id', d.id))
+      must(await sb.from('devices').update({ status: 'off', ...(d.discovery_source ? {} : { discovery_source: 'agent' }) }).eq('id', d.id))
       off++
     } else {
       pending++
@@ -285,7 +475,7 @@ if (baseline) {
   console.log('    Premier inventaire : aucune alerte créée (référence de départ).')
 } else if (alerts.length && !NO_ALERTS) {
   const r = await sb.from('alerts').insert(alerts)
-  if (r.error) console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_hardening.sql ?)')
+  if (r.error) console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_n2_prep.sql ?)')
   else console.log(`    ${alerts.length} alerte(s) créée(s)`)
 } else {
   console.log('    Aucune nouvelle alerte.')
@@ -294,4 +484,4 @@ if (baseline) {
 await sb.auth.signOut()
 console.log(`✔ Terminé : ${alive.length} appareil(s) en ligne, ${off} passé(s) hors ligne.`)
 if (pending) console.log(`  ${pending} appareil(s) absent(s) depuis moins de 90 min : statut inchangé.`)
-console.log('  Le type des nouveaux appareils est une estimation : corrigez-le dans « Réseau & Appareils ».')
+console.log('  Les appareils sans type connu restent « Inconnu » : corrigez-les dans « Réseau & Appareils ».')
