@@ -31,6 +31,9 @@ import { createActions } from './lib/actions.mjs'
 import { createLocalFixes } from './lib/fixes.mjs'
 import { createInventory, cidrOf } from './lib/inventory.mjs'
 import { createOui } from './lib/oui.mjs'
+import { parseSnmpConfig } from './lib/snmp-config.mjs'
+import { createSnmpClient } from './lib/snmp-client.mjs'
+import { createTopologySync } from './lib/topo-sync.mjs'
 import { createBlocker } from './lib/blocker.mjs'
 import dns from 'node:dns/promises'
 
@@ -138,7 +141,8 @@ const detectors = createDetectors({
 })
 
 // Inventaire (lib/inventory.mjs) : créé AVANT la capture, connecté à la base plus tard (setClient).
-const inventory = createInventory({ oui: createOui() })
+const oui = createOui()
+const inventory = createInventory({ oui })
 
 function saveBaseline() {
   const s = detectors.snapshot()
@@ -417,6 +421,42 @@ async function inventoryOnce() {
 setTimeout(inventoryOnce, Number(process.env.CV_TEST_INVENTORY_DELAY_MS) || 60 * 1000).unref()
 setInterval(inventoryOnce, 5 * 60 * 1000).unref()
 
+// Lecture des switchs et points Wi-Fi (SNMP, LECTURE SEULE) si snmp.json existe dans le dossier de données :
+// port de chaque appareil, liaisons entre équipements (LLDP / CDP), appareils Wi-Fi derrière leur point d'accès.
+// Le fichier est relu à chaque passage (ajout possible sans redémarrer). Ses identifiants ne quittent jamais ce PC.
+const SNMP_FILE = join(DATA, 'snmp.json')
+let topoSync = null
+let topoConfigText = null
+let topoRunning = false
+async function topologyOnce() {
+  if (!opts.push || topoRunning || !existsSync(SNMP_FILE)) return
+  topoRunning = true
+  try {
+    const text = readFileSync(SNMP_FILE, 'utf8')
+    if (text !== topoConfigText) {
+      topoConfigText = text
+      const parsed = parseSnmpConfig(text)
+      if (parsed.error) { topoSync = null; console.log('⚠ Lecture des switchs désactivée : ' + parsed.error); return }
+      const p = await pusher()
+      if (!p) return
+      topoSync = createTopologySync({ db: p.client, snmp: createSnmpClient(), config: parsed.config, oui })
+      console.log(`Lecture des switchs (SNMP) : ${parsed.config.credentials.length} identifiant(s), ${parsed.config.targets.length} équipement(s) listé(s), découverte ${parsed.config.auto ? 'automatique' : 'désactivée'}.`)
+    }
+    if (!topoSync) return
+    const p = await pusher()
+    if (!p) return
+    inventory.setClient(p.client)
+    const networkId = await inventory.ensureNetwork({ gatewayMac: opts.gatewayMac || saved?.gatewayMac || null, gatewayIp, name: config.client || null })
+    await topoSync.run({ networkId, gatewayIp })
+  } catch (e) {
+    console.log('⚠ Lecture des switchs : ' + e.message)
+  } finally {
+    topoRunning = false
+  }
+}
+setTimeout(topologyOnce, Number(process.env.CV_TEST_TOPOLOGY_DELAY_MS) || 2 * 60 * 1000).unref()
+setInterval(topologyOnce, 15 * 60 * 1000).unref()
+
 // Demandes de la page web (table sensor_commands) : « Analyser maintenant ». Liste blanche de gestionnaires ;
 // tout autre type reçoit un refus explicite (les blocages et corrections arrivent dans une version ultérieure).
 if (opts.push) {
@@ -436,7 +476,8 @@ if (opts.push) {
       client: p.client,
       sensorName: hostname(),
       handlers: {
-        scan_now: () => vulnScanOnce(),
+        // « Analyser maintenant » rafraîchit aussi la carte du réseau (lecture des switchs, si configurée).
+        scan_now: async () => { const r = await vulnScanOnce(); topologyOnce().catch(() => {}); return r },
         block_ip: (params) => autoActions.handlers.block_ip(params),
         unblock_ip: (params) => autoActions.handlers.unblock_ip(params),
         // Corrections de la liste blanche (lib/fixes.mjs), sur CE PC seulement ; re-audit aussitôt après.

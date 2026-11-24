@@ -86,6 +86,28 @@ Avec `--push`, le capteur inventorie son réseau toutes les 5 minutes (premier p
 - Limite : un PC seul ne voit pas sur quel port de switch ni sur quel point Wi-Fi chaque appareil est branché ;
   cela demande la lecture des switchs (SNMP, en lecture seule).
 
+## Lecture des switchs et points Wi-Fi (SNMP, lecture seule)
+Facultatif. Avec `snmp.json` dans le dossier de données (créé par l'installateur, ou à la main), le capteur lit
+toutes les 15 minutes (et à chaque « Analyser maintenant ») les tables **standard** des équipements, communes à
+Cisco, Aruba, TP-Link, D-Link… : table des MAC par port (BRIDGE-MIB / Q-BRIDGE-MIB), voisins LLDP (et CDP pour
+Cisco), noms des ports (IF-MIB), table ARP (IP-MIB). Il en déduit :
+- le **port exact** de chaque appareil (les ports de liaison entre switchs sont écartés) ;
+- les **liaisons entre switchs** et vers les points d'accès (LLDP / CDP, constatées) ;
+- les appareils **Wi-Fi** derrière chaque point d'accès qui annonce LLDP (déduit) ;
+- un port partagé par plusieurs appareils sans LLDP est signalé comme tel (switch non géré, hub ou Wi-Fi).
+
+Règles : GET / GETBULK uniquement (aucune écriture) ; adresses privées seulement ; 64 équipements au plus par
+passage ; parcours bornés (lignes, durée, boucle détectée) ; identifiants (SNMPv2c « community » ou SNMPv3 avec
+authentification SHA et chiffrement AES, recommandé) **jamais** envoyés à la base, à la page ni au journal.
+```json
+{ "credentials": [ { "version": "2c", "community": "…" },
+                   { "version": "3", "user": "…", "authProtocol": "sha256", "authKey": "…", "privProtocol": "aes", "privKey": "…" } ],
+  "targets": ["10.15.0.2", "10.15.0.3"], "auto": true }
+```
+Limites : un switch non géré ne peut pas être lu ; les points d'accès pilotés par un contrôleur qui « tunnelise »
+le trafic montrent leurs clients derrière le contrôleur ; l'association exacte d'un client Wi-Fi à un point
+d'accès sans LLDP n'est pas déterminable par les MIB standard.
+
 ## Interface (tableau de bord)
 L'installateur place le tableau de bord dans le dossier `ui` et le capteur le sert lui-même : aucun site
 externe à installer. Sur le PC : raccourci **CyberVeylix** sur le Bureau, ou `http://localhost:8710`.

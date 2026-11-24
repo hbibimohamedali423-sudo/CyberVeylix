@@ -1,7 +1,7 @@
 // Mini PostgREST + Auth en mémoire (test d'intégration du capteur). Expose aussi /__db pour lire/écrire l'état.
 import http from 'node:http'
 export function startMock(port) {
-  const db = { networks: [], devices: [], alerts: [], vulnerabilities: [], services: [], sensors: [], sensor_commands: [], blocked_ips: [] }
+  const db = { networks: [], devices: [], alerts: [], vulnerabilities: [], services: [], sensors: [], sensor_commands: [], blocked_ips: [], links: [] }
   let seq = 0
   const id = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`
   const parseVal = (v) => (v === 'null' ? null : v === 'true' ? true : v === 'false' ? false : v)
@@ -54,6 +54,11 @@ export function startMock(port) {
         const patch = JSON.parse(body || '{}'); const out = hit()
         for (const r of out) Object.assign(r, patch)
         return prefer.includes('return=representation') ? send(200, out) : send(204)
+      }
+      if (req.method === 'DELETE') {
+        const gone = hit()
+        db[m[1]] = rows.filter((r) => !gone.includes(r))
+        return send(204)
       }
       return send(405, {})
     })

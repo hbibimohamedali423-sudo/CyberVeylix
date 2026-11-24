@@ -124,6 +124,44 @@ function Format-EnvValue([string]$Value) {
   throw 'Valeur invalide dans agent.env (guillemets simples et doubles à la fois).'
 }
 
+# Saisie masquée (identifiants SNMP) : la valeur n'apparaît jamais à l'écran.
+function Read-Secret([string]$Prompt) {
+  $secure = Read-Host "    $Prompt" -AsSecureString
+  $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+  finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+}
+
+# Lecture des switchs et points d'accès (SNMP, LECTURE SEULE) : identifiants enregistrés dans snmp.json du dossier
+# de données (accès SYSTEM / administrateurs). Ils ne quittent jamais ce PC.
+function Set-SnmpConfig([string]$Path) {
+  $creds = New-Object System.Collections.ArrayList
+  do {
+    $v = ''
+    while ($v -ne '2' -and $v -ne '3') { $v = (Read-Host '    Version SNMP de vos équipements : 2 (community) ou 3 (utilisateur)').Trim() }
+    if ($v -eq '2') {
+      do { $c = Read-Secret 'Community en lecture seule (celle configurée sur vos switchs)' } until ($c -and $c.Length -le 64 -and $c -notmatch '\s')
+      [void]$creds.Add([ordered]@{ version = '2c'; community = $c })
+    } else {
+      do { $u = (Read-Host '    Utilisateur SNMPv3').Trim() } until ($u -and $u.Length -le 32)
+      do { $ak = Read-Secret 'Clé d''authentification SHA (8 caractères au moins)' } until ($ak.Length -ge 8)
+      do { $pk = Read-Secret 'Clé de chiffrement AES (8 caractères au moins ; vide = sans chiffrement)' } until ($pk.Length -eq 0 -or $pk.Length -ge 8)
+      $entry = [ordered]@{ version = '3'; user = $u; authProtocol = 'sha'; authKey = $ak }
+      if ($pk) { $entry.privProtocol = 'aes'; $entry.privKey = $pk }
+      [void]$creds.Add($entry)
+    }
+  } while ($creds.Count -lt 5 -and (Read-YesNo 'Ajouter un autre identifiant (autre marque ou autre réglage) ?' $false))
+  $raw = (Read-Host '    Adresses IP de vos switchs / points d''accès, séparées par des virgules (vide = découverte automatique)').Trim()
+  $targets = @($raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  foreach ($t in $targets) {
+    if ($t -notmatch '^\d{1,3}(\.\d{1,3}){3}(:\d{1,5}){0,1}$') { throw "Adresse d'équipement invalide : $t" }
+  }
+  $cfg = [ordered]@{ credentials = @($creds); targets = $targets; auto = $true }
+  Write-Utf8NoBom $Path (($cfg | ConvertTo-Json -Depth 4) + "`n")
+  $creds.Clear()
+  Write-Ok "Lecture des switchs configurée : premier résultat 2 minutes après le démarrage, puis toutes les 15 minutes"
+}
+
 function Test-Npcap {
   $service = Get-Service -Name 'npcap' -ErrorAction SilentlyContinue
   return ($null -ne $service) -and (Test-Path (Join-Path $NpcapDir 'wpcap.dll'))
@@ -462,6 +500,18 @@ try {
       } else { Write-Ok 'Interface désactivée' }
     }
 
+    Write-Step 'Lecture des switchs et points Wi-Fi (facultatif)'
+    Write-Note 'Avec un accès SNMP en lecture seule à vos switchs, la carte indique le port de chaque appareil, les liaisons'
+    Write-Note 'entre switchs et les appareils Wi-Fi de chaque point d''accès. Rien n''est modifié sur les équipements.'
+    $snmpFile = Join-Path $DataDir 'snmp.json'
+    if ($pushEnabled -and -not $Unattended -and (Read-YesNo 'Configurer la lecture des switchs maintenant ?' $false)) {
+      Set-SnmpConfig $snmpFile
+    } elseif (Test-Path $snmpFile) {
+      Write-Ok 'Lecture des switchs : configuration existante conservée'
+    } else {
+      Write-Ok 'Lecture des switchs non configurée (possible plus tard avec -Reconfigure)'
+    }
+
     # Une référence apprise sur un autre réseau ou une autre passerelle n'est plus valable.
     if ((Test-Path $baselineFile) -and $existing -and ($existing.gateway -ne $selected.Gateway)) {
       Remove-Item -Path $baselineFile -Force
@@ -517,6 +567,13 @@ try {
       } else {
         Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer l''interface (tableau de bord).'
       }
+    }
+    # Mise à jour : la lecture des switchs est proposée si elle n'a jamais été configurée.
+    $snmpFile = Join-Path $DataDir 'snmp.json'
+    if ($pushEnabled -and -not $Unattended -and -not (Test-Path $snmpFile)) {
+      Write-Step 'Lecture des switchs et points Wi-Fi (facultatif)'
+      Write-Note 'Nouveau : avec un accès SNMP en lecture seule, la carte indique le port et le point Wi-Fi de chaque appareil.'
+      if (Read-YesNo 'Configurer la lecture des switchs maintenant ?' $false) { Set-SnmpConfig $snmpFile }
     }
     if (($null -eq $existing.honeypot) -or ($null -eq $existing.vulnScan)) {
       Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer les leurres et l''analyse des vulnérabilités.'

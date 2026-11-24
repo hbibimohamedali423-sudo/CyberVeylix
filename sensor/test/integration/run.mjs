@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startMock } from './mock-supabase.mjs'
 import { arpFrame, dhcpClientFrame } from '../frames.mjs'
+import { startAgent } from '../snmp-live-test.mjs'
 const HERE = fileURLToPath(new URL('.', import.meta.url))
 const REPO = fileURLToPath(new URL('../../../', import.meta.url))
 const SP = mkdtempSync(join(tmpdir(), 'cv-it-'))
@@ -19,6 +20,10 @@ writeFileSync(`${SP}/it/test.env`, 'SUPABASE_URL=http://127.0.0.1:54399\nSUPABAS
 rmSync(`${SP}/it/data`, { recursive: true, force: true }); mkdirSync(`${SP}/it/data`, { recursive: true })
 // Trames « reçues » par la carte simulée : passerelle Fortinet, caméra Hikvision, téléphone Xiaomi (DHCP avec nom).
 const GW_MAC = '38:c0:ea:0d:59:2a'
+// Faux switch SNMP (vrai échange UDP) + snmp.json dans le dossier de données du capteur.
+const SNMP_SECRET = 'communaute-secrete-it'
+const agent = await startAgent({ community: SNMP_SECRET })
+writeFileSync(`${SP}/it/data/snmp.json`, JSON.stringify({ credentials: [{ version: '2c', community: SNMP_SECRET }], targets: [`127.0.0.1:${agent.port}`], auto: false }))
 writeFileSync(`${SP}/it/frames.json`, JSON.stringify([
   arpFrame({ op: 2, senderMac: GW_MAC, senderIp: '192.168.50.1' }),
   arpFrame({ op: 1, senderMac: '44:19:b6:00:00:01', senderIp: '192.168.50.20' }),
@@ -26,7 +31,7 @@ writeFileSync(`${SP}/it/frames.json`, JSON.stringify([
 ].map((b) => b.toString('hex'))))
 const uiDir = `${REPO}/sensor/ui`; const hadUi = existsSync(uiDir)
 if (!hadUi) cpSync(`${REPO}/dist`, uiDir, { recursive: true })
-const proc = spawn(process.execPath, [`--env-file=${SP}/it/test.env`, `${REPO}/sensor/listener.mjs`, '--yes', '--push', '--ui', '--ui-port=8799', `--data-dir=${SP}/it/data`, '--learn-minutes=0', '--gateway=192.168.50.1', `--gateway-mac=${GW_MAC}`], { env: { ...process.env, NODE_PATH: join(HERE, 'stubmods'), CV_STUB_FRAMES: `${SP}/it/frames.json`, CV_TEST_INVENTORY_DELAY_MS: '1500' } })
+const proc = spawn(process.execPath, [`--env-file=${SP}/it/test.env`, `${REPO}/sensor/listener.mjs`, '--yes', '--push', '--ui', '--ui-port=8799', `--data-dir=${SP}/it/data`, '--learn-minutes=0', '--gateway=192.168.50.1', `--gateway-mac=${GW_MAC}`], { env: { ...process.env, NODE_PATH: join(HERE, 'stubmods'), CV_STUB_FRAMES: `${SP}/it/frames.json`, CV_TEST_INVENTORY_DELAY_MS: '1500', CV_TEST_TOPOLOGY_DELAY_MS: '2500' } })
 let log = ''; proc.stdout.on('data', (d) => { log += d }); proc.stderr.on('data', (d) => { log += d })
 const results = []; const ok = (name, cond, extra = '') => { results.push([cond ? 'PASS' : 'FAIL', name, extra]) }
 try {
@@ -63,11 +68,15 @@ try {
   ok('inventaire : caméra identifiée par son fabricant', dev('44:19:b6:00:00:01').role === 'camera' && dev('44:19:b6:00:00:01').type === 'Caméra', JSON.stringify(dev('44:19:b6:00:00:01')))
   ok('inventaire : téléphone nommé par sa demande DHCP', dev('d8:b0:53:13:54:8d').name === 'Redmi-Note-12' && dev('d8:b0:53:13:54:8d').role === 'phone' && dev('d8:b0:53:13:54:8d').ip === '192.168.50.64', JSON.stringify(dev('d8:b0:53:13:54:8d')))
   ok('inventaire : appareils rattachés au réseau, preuve enregistrée', mock.db.devices.every((d) => d.network_id === net.id && String(d.role_evidence).startsWith('Capteur : ')))
+  for (let i = 0; i < 40 && !mock.db.devices.some((d) => d.discovery_source === 'snmp'); i++) await sleep(250)
+  const sw = mock.db.devices.find((d) => d.discovery_source === 'snmp') || {}
+  ok('switchs : équipement lu en SNMP réel et ajouté comme switch', sw.hostname === 'SW-TEST' && sw.role === 'switch' && sw.network_id === net.id, JSON.stringify(sw))
+  ok('switchs : identifiants SNMP absents de la base et du journal', !JSON.stringify(mock.db).includes(SNMP_SECRET) && !log.includes(SNMP_SECRET))
   ok('aucune erreur fatale dans le journal', !/✖|TypeError|ReferenceError|Unhandled/.test(log))
 } catch (e) {
   results.push(['FAIL', 'exception du test', String(e && e.message)])
 } finally {
-  proc.kill('SIGTERM'); await sleep(500); mock.close()
+  proc.kill('SIGTERM'); await sleep(500); mock.close(); agent.close()
   if (!hadUi) rmSync(uiDir, { recursive: true, force: true })
   rmSync(SP, { recursive: true, force: true })
 }
