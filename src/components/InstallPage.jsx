@@ -19,6 +19,7 @@ const CMD = {
   reconfigure: '& "$env:ProgramFiles\\CyberVeylix\\Sensor\\install.cmd" -Reconfigure',
   uninstall: '& "$env:ProgramFiles\\CyberVeylix\\Sensor\\uninstall.cmd"',
   export: '& "$env:ProgramFiles\\CyberVeylix\\Sensor\\uninstall.cmd" -Unattended -ExportTo "$env:USERPROFILE\\Desktop\\cyberveylix-export.zip"',
+  ui: 'http://localhost:8710',
 }
 
 function Command({ id, text, copied, onCopy }) {
@@ -82,6 +83,13 @@ export default function InstallPage() {
       </section>
 
       <section>
+        <h4>{t('installPage.uiTitle')}</h4>
+        <p>{t('installPage.uiText')}</p>
+        {cmd('ui')}
+        <p className="m">{t('installPage.uiLan')}</p>
+      </section>
+
+      <section>
         <h4>{t('installPage.detectsTitle')}</h4>
         <ul className="detects">
           <li><b className="c">●</b> {t('installPage.det1')}</li>
@@ -93,6 +101,16 @@ export default function InstallPage() {
           <li><b className="h">●</b> {t('installPage.det4')}</li>
           <li><b className="h">●</b> {t('installPage.det5')}</li>
           <li><b className="mm">●</b> {t('installPage.det6')}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h4>{t('installPage.actTitle')}</h4>
+        <ul>
+          <li>{t('installPage.act1')}</li>
+          <li>{t('installPage.act2')}</li>
+          <li>{t('installPage.act3')}</li>
+          <li>{t('installPage.act4')}</li>
         </ul>
       </section>
 

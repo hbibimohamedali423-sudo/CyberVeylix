@@ -360,21 +360,40 @@ try {
     Write-Ok "$ClientName — $AuthorizationRef"
 
     Write-Step 'Tableau de bord'
+    Write-Note 'Recommandé : sans cette liaison, ni l''interface ni les actions depuis la page (analyse, blocage, correction) ne fonctionnent.'
     $pushEnabled = $false
-    $wantPush = $Push -or (Read-YesNo 'Envoyer aussi les alertes au tableau de bord CyberVeylix ?' $false)
+    $wantPush = $Push -or (Read-YesNo 'Relier ce capteur au tableau de bord CyberVeylix ?' (-not $Unattended))
     if ($wantPush) {
       if ($EnvFile) {
         Copy-Item -Path $EnvFile -Destination $agentEnv -Force
       } elseif ($Unattended) {
         throw '-Push exige -EnvFile <agent.env> en mode -Unattended.'
       } else {
-        $url = (Read-Host '    SUPABASE_URL').Trim()
-        $key = (Read-Host '    SUPABASE_ANON_KEY (clé publique, jamais service_role)').Trim()
-        $email = (Read-Host '    E-mail du compte').Trim()
-        $secure = Read-Host '    Mot de passe du compte' -AsSecureString
-        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-        try { $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        # TLS 1.2 : certains Windows 10 avec PowerShell 5.1 ne l'activent pas par défaut.
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $verified = $false
+        for ($attempt = 1; $attempt -le 3 -and -not $verified; $attempt++) {
+          do { $url = (Read-Host '    SUPABASE_URL (https://....supabase.co)').Trim().TrimEnd('/') } until ($url -match '^https://[A-Za-z0-9.-]+$')
+          do { $key = (Read-Host '    SUPABASE_ANON_KEY (clé publique, jamais service_role)').Trim() } until ($key.Length -ge 20)
+          do { $email = (Read-Host '    E-mail du compte').Trim() } until ($email -match '^[^@\s]+@[^@\s]+$')
+          $secure = Read-Host '    Mot de passe du compte' -AsSecureString
+          $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+          try { $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+          finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+          # Vérification immédiate : connexion au compte avec ces valeurs (rien n'est enregistré côté serveur).
+          try {
+            $body = @{ email = $email; password = $password } | ConvertTo-Json
+            $session = Invoke-RestMethod -Method Post -Uri "$url/auth/v1/token?grant_type=password" -Headers @{ apikey = $key } `
+              -ContentType 'application/json' -Body $body -TimeoutSec 20
+            if ($session.access_token) { $verified = $true; Write-Ok "Connexion au tableau de bord vérifiée ($email)" }
+          } catch {
+            Write-Attention "Connexion refusée : $($_.Exception.Message)"
+            if ($attempt -lt 3) { Write-Note 'Vérifiez l''adresse, la clé, l''e-mail et le mot de passe, puis recommencez.' }
+          }
+          $body = $null
+          if (-not $verified) { $password = $null }
+        }
+        if (-not $verified) { throw 'Connexion au tableau de bord impossible après 3 essais : relancez install.cmd une fois les identifiants vérifiés.' }
         $envText = @(
           ('SUPABASE_URL=' + (Format-EnvValue $url)),
           ('SUPABASE_ANON_KEY=' + (Format-EnvValue $key)),
@@ -484,7 +503,20 @@ try {
     if ($existing.uiPort) { $UiPort = [int]$existing.uiPort }
     $UiLocalOnly = ($null -ne $existing.uiLan) -and (-not [bool]$existing.uiLan)
     if ($null -eq $existing.ui) {
-      Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer l''interface (tableau de bord).'
+      # Mise à jour depuis une version sans interface : on propose de l'activer sans tout reconfigurer.
+      $uiReady = (-not $NoUi) -and $pushEnabled -and (Test-Path (Join-Path $InstallDir 'ui\index.html'))
+      if ($uiReady) {
+        Write-Step 'Interface (tableau de bord)'
+        Write-Note "Nouveau : le capteur peut afficher le tableau de bord dans le navigateur (port $UiPort)."
+        $uiEnabled = Read-YesNo 'Activer l''interface sur ce PC (recommandé) ?' $true
+        $existing | Add-Member -NotePropertyName ui -NotePropertyValue $uiEnabled -Force
+        $existing | Add-Member -NotePropertyName uiPort -NotePropertyValue $UiPort -Force
+        $existing | Add-Member -NotePropertyName uiLan -NotePropertyValue (-not $UiLocalOnly) -Force
+        Write-Utf8NoBom $configFile (($existing | ConvertTo-Json) + "`n")
+        if ($uiEnabled) { Write-Ok "Interface activée : http://localhost:$UiPort" } else { Write-Ok 'Interface désactivée' }
+      } else {
+        Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer l''interface (tableau de bord).'
+      }
     }
     if (($null -eq $existing.honeypot) -or ($null -eq $existing.vulnScan)) {
       Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer les leurres et l''analyse des vulnérabilités.'
