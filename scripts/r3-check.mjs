@@ -1,5 +1,8 @@
 // Vérifications de la logique R3 (aucune dépendance) : node scripts/r3-check.mjs
 import assert from 'node:assert/strict'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand, pickSensorFor, blockState, localFixOf, fixSensorFor, hostKey, buildTimeline, parseIpList } from '../src/lib/findings.js'
 
 let passed = 0
@@ -118,6 +121,25 @@ check('liste de confiance : IPv4 valides, doublons retirés, erreurs signalées'
   assert.deepEqual(parseIpList('192.168.1.5, 192.168.1.6\n192.168.1.5;abc 300.1.1.1'), { ips: ['192.168.1.5', '192.168.1.6'], invalid: ['abc', '300.1.1.1'], tooMany: false })
   assert.deepEqual(parseIpList(''), { ips: [], invalid: [], tooMany: false })
   assert.equal(parseIpList(Array.from({ length: 101 }, (_, i) => `10.0.${Math.floor(i / 250)}.${i % 250}`).join(' ')).tooMany, true)
+})
+
+// Régression : le tableau de bord lit chaque table triée par created_at (src/useRows.js). Une table lue
+// sans cette colonne renvoie une erreur 400 (« Erreur de synchronisation ») : vérifié sur les scripts SQL.
+check('chaque table lue par le tableau de bord a une colonne created_at (scripts supabase/)', () => {
+  const root = fileURLToPath(new URL('..', import.meta.url))
+  const files = (dir) => readdirSync(dir).flatMap((n) => { const f = join(dir, n); return statSync(f).isDirectory() ? files(f) : [f] })
+  const tables = new Set()
+  for (const f of files(join(root, 'src')).filter((f) => /\.(js|jsx)$/.test(f))) {
+    for (const m of readFileSync(f, 'utf8').matchAll(/useRows\('([a-z_]+)'/g)) tables.add(m[1])
+  }
+  assert.ok(tables.size >= 9, `seulement ${tables.size} table(s) trouvée(s)`)
+  const sql = readdirSync(join(root, 'supabase')).filter((n) => n.endsWith('.sql')).map((n) => readFileSync(join(root, 'supabase', n), 'utf8')).join('\n')
+  for (const t of tables) {
+    const created = new RegExp(`create table if not exists public\\.${t} \\(([\\s\\S]*?)\\n\\);`).exec(sql)
+    const inCreate = created && /\bcreated_at\b/.test(created[1])
+    const added = new RegExp(`alter table public\\.${t} add column if not exists created_at\\b`).test(sql)
+    assert.ok(inCreate || added, `table ${t} : colonne created_at absente des scripts SQL`)
+  }
 })
 
 console.log('')

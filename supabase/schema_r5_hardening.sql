@@ -7,3 +7,7 @@ revoke execute on function public.rls_auto_enable() from public, anon, authentic
 
 -- Index de la clé étrangère blocked_ips.alert_id (ajoutée en R4), signalé par l'analyseur de performances.
 create index if not exists blocked_ips_alert_idx on public.blocked_ips(alert_id);
+
+-- blocked_ips (R4) n'avait pas de colonne created_at : le tableau de bord lit chaque table triée par created_at
+-- (src/useRows.js), d'où une erreur 400 et « Erreur de synchronisation ». Même convention que les autres tables.
+alter table public.blocked_ips add column if not exists created_at timestamptz not null default now();
