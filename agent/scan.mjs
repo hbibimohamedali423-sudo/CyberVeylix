@@ -313,6 +313,18 @@ let network
   }
 
   if (!rows.length) {
+    // Réseau inconnu (autre Wi-Fi : café, hôtel, client…) : beaucoup utilisent aussi 192.168.1.x,
+    // donc --local-only ne suffit pas à les distinguer. Sans approbation explicite, on n'écrit RIEN
+    // (pas même le nom du réseau) et on ne scanne RIEN. L'approbation n'est possible qu'en lancement
+    // manuel : un lancement automatique (--local-only) ne peut jamais ajouter un réseau.
+    const approve = args.includes('--approve-network') && !args.includes('--local-only')
+    if (!approve) {
+      console.log(`Réseau inconnu (${identity.ssid || NET_CIDR}) : aucun scan, aucune donnée enregistrée.`)
+      console.log('  Pour ajouter CE réseau (le vôtre, ou avec l\'autorisation écrite de son propriétaire), connectez-vous-y')
+      console.log('  et lancez à la main : node --env-file=agent/.env agent/scan.mjs --yes --approve-network')
+      await sb.auth.signOut()
+      process.exit(0)
+    }
     const created = await sb.from('networks').insert({
       name: identity.ssid || NET_CIDR,
       cidr: NET_CIDR,
@@ -323,7 +335,7 @@ let network
       last_seen: now,
     }).select('*').single()
     network = must(created)
-    console.log(`Nouveau réseau : ${network.name} — ${network.cidr}`)
+    console.log(`Nouveau réseau approuvé : ${network.name} — ${network.cidr}`)
   } else {
     network = rows[0]
     if (network.scan_allowed !== true) {

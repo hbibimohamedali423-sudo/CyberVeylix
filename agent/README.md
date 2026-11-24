@@ -29,6 +29,9 @@ node --env-file=agent/.env agent/scan.mjs --yes
 ```
 `--yes` confirme que vous êtes autorisé à scanner ce réseau.
 `--cidr=192.168.0.0/24` remplace SCAN_CIDR.
+`--approve-network` : ajoute le réseau auquel ce PC est connecté (premier lancement, à la main, sur VOTRE réseau).
+Un réseau inconnu n'est jamais scanné ni enregistré : beaucoup de Wi-Fi (cafés, hôtels, clients) utilisent aussi
+192.168.1.x, et un lancement automatique (`--local-only`) ne peut jamais ajouter de réseau.
 
 ## Sécurité
 - Ne scannez que des réseaux qui vous appartiennent ou avec autorisation écrite.
