@@ -12,6 +12,7 @@ import TopologySummary from './components/TopologySummary'
 import DevicesPage from './components/DevicesPage'
 import AlertsPage from './components/AlertsPage'
 import VulnsPage from './components/VulnsPage'
+import InstallPage from './components/InstallPage'
 import { TYPES, STATUS, SEV, CATS } from './constants'
 import { useI18n } from './i18n/context.js'
 import { LanguageSelect } from './i18n/index.jsx'
@@ -65,6 +66,10 @@ function Dashboard({ user }) {
         ) : page === 'threats' ? (
           <main className="main wide">
             <AlertsPage alerts={alr.rows} onUpdate={alr.update} />
+          </main>
+        ) : page === 'install' ? (
+          <main className="main wide">
+            <InstallPage />
           </main>
         ) : (
           <main className="main wide">

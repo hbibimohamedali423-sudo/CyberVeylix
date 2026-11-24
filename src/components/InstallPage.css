@@ -1,0 +1,19 @@
+/* Toutes les règles sont limitées à .install-page : aucun style global (Vite regroupe le CSS). */
+/* min-width:0 : dans la grille de .main, une longue commande ne doit pas élargir la carte (débordement mobile). */
+.install-page{max-width:900px;min-width:0}
+.install-page .lead{margin:10px 0 4px;color:var(--t);line-height:1.5}
+.install-page section{margin-top:18px;padding-top:14px;border-top:1px solid var(--border-soft)}
+.install-page h4{font-size:13px;font-weight:600;margin-bottom:8px;color:var(--accent-ink)}
+.install-page ul,.install-page ol{margin:0;padding-inline-start:20px;line-height:1.7;color:var(--t);font-size:13px}
+.install-page p{font-size:13px;line-height:1.5;margin:8px 0}
+.install-page p.m{font-size:12px}
+.install-page .detects{list-style:none;padding-inline-start:0}
+.install-page .detects b{font-weight:400;margin-inline-end:6px}
+.install-page .detects b.c{color:var(--sev-c)}.install-page .detects b.h{color:var(--sev-h)}.install-page .detects b.mm{color:var(--sev-m)}
+.install-page .dl-btn{display:inline-block;margin:12px 0 4px;padding:9px 16px;border-radius:6px;background:var(--primary);color:var(--on-accent);font-weight:600;font-size:13px;text-decoration:none}
+.install-page .cmd{display:flex;align-items:stretch;gap:8px;margin:6px 0}
+.install-page .cmd code{flex:1;min-width:0;overflow-x:auto;white-space:pre;padding:8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border-soft);color:var(--t);font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;user-select:all;text-align:left}
+.install-page .cmd button{width:auto;margin:0;padding:6px 12px;font-size:12px;flex:none;background:var(--surface2);color:var(--t)}
+.install-page .why{margin-top:18px;padding:10px 12px;border-radius:6px;background:var(--surface)}
+.install-page .dl-btn:focus-visible,.install-page button:focus-visible{outline:2px solid var(--focus-color);outline-offset:2px}
+@media(max-width:700px){.install-page .cmd{flex-direction:column}.install-page .cmd code{width:100%;box-sizing:border-box}.install-page .cmd button{align-self:flex-start}}

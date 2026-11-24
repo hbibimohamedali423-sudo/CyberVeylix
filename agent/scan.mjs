@@ -5,6 +5,7 @@ import dns from 'node:dns/promises'
 import { execFile, spawnSync } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createClient } from '@supabase/supabase-js'
+import { createIndex, matchHost, devicePatch, newDeviceAlert, sensitivePortAlerts, planOffline, normalizeMac } from './lib/reconcile.mjs'
 
 const run = promisify(execFile)
 const WIN = process.platform === 'win32'
@@ -171,6 +172,11 @@ if (CHECK) {
   console.log(v.error ? '✖ Table services : ' + v.error.message + ' (exécutez supabase/schema_scan.sql)' : 'Table services : OK')
   const a = await sb.from('alerts').select('device_id', { count: 'exact', head: true })
   console.log(a.error ? '✖ Table alerts : ' + a.error.message + ' (exécutez supabase/schema_hardening.sql)' : 'Table alerts (device_id) : OK')
+  // Colonnes de suivi utilisées par les boutons « Prise en compte » / « Résoudre » et la note.
+  for (const [table, cols] of [['alerts', 'status,acknowledged_at,resolved_at'], ['vulnerabilities', 'status,acknowledged_at,resolved_at,note']]) {
+    const r = await sb.from(table).select(cols, { count: 'exact', head: true })
+    console.log(r.error ? `✖ Table ${table} (suivi) : ${r.error.message} (exécutez supabase/schema_status.sql)` : `Table ${table} (statut, dates${table === 'vulnerabilities' ? ', note' : ''}) : OK`)
+  }
   await sb.auth.signOut()
   process.exit(0)
 }
@@ -204,51 +210,46 @@ const alive = await pool([...up].sort((a, b) => toInt(a) - toInt(b)), 8, async (
 for (const h of alive) console.log(`    ${h.ip.padEnd(15)} ${(h.name || '-').padEnd(20)} ${h.ports.join(',') || '-'}`)
 
 console.log('3/3 Enregistrement…')
-const existing = must(await sb.from('devices').select('id,ip,status,last_seen')) || []
-const byIp = new Map()
-for (const d of existing) if (d.ip && !byIp.has(d.ip)) byIp.set(d.ip, d)
+const existing = must(await sb.from('devices').select('id,ip,mac,name,status,last_seen')) || []
+const index = createIndex(existing)
+const touched = new Set()
 const now = new Date().toISOString()
 // Premier inventaire de cette plage : on enregistre tout comme référence, sans créer d'alertes.
 const baseline = !existing.some((d) => d.ip && inRange(d.ip))
-const alerts = []
+let alertCount = 0
+let alertErrors = 0
+
+// Alertes enregistrées immédiatement, appareil par appareil : si le scan s'interrompt plus loin
+// (réseau, base), les alertes déjà dues ne sont plus perdues.
+async function raise(list, deviceId) {
+  if (baseline || NO_ALERTS || !list.length) return
+  const r = await sb.from('alerts').insert(list.map((a) => ({ ...a, device_id: deviceId })))
+  if (r.error) {
+    alertErrors++
+    console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_hardening.sql ?)')
+  } else {
+    alertCount += list.length
+  }
+}
 
 for (const h of alive) {
-  const ex = byIp.get(h.ip)
-  const who = `${h.ip}${h.name ? ' — ' + h.name : ''}`
+  const match = matchHost(h, index, touched)
+  const hostAlerts = []
   let id
   let prev = []
-  if (ex) {
-    // La MAC n'est remplacée que si elle a été lue, pour ne pas effacer une valeur déjà connue.
-    must(await sb.from('devices')
-      .update({ status: 'on', last_seen: now, ...(h.mac ? { mac: h.mac } : {}) })
-      .eq('id', ex.id))
-    id = ex.id
+  if (match.device) {
+    id = match.device.id
+    must(await sb.from('devices').update(devicePatch(h, match.device, now)).eq('id', id))
     prev = (must(await sb.from('services').select('port').eq('device_id', id)) || []).map((x) => x.port)
   } else {
-    id = must(await sb.from('devices')
-      .insert({ name: h.name || h.ip, ip: h.ip, mac: h.mac, type: guessType(h.ports), status: 'on', last_seen: now })
-      .select('id').single()).id
-    if (!baseline) {
-      alerts.push({
-        title: 'Nouvel appareil détecté',
-        detail: `${who}${h.mac ? ' (' + h.mac + ')' : ''}`,
-        severity: 'm',
-        device_id: id,
-      })
-    }
+    const row = { name: h.name || h.ip, ip: h.ip, mac: normalizeMac(h.mac), type: guessType(h.ports), status: 'on', last_seen: now }
+    id = must(await sb.from('devices').insert(row).select('id').single()).id
+    index.add({ id, ...row })
+    hostAlerts.push(newDeviceAlert(h, match.replaced))
   }
-  if (!baseline) {
-    for (const p of h.ports) {
-      if (SENSITIVE[p] && !prev.includes(p)) {
-        alerts.push({
-          title: `Port ${p} ouvert (${SENSITIVE[p][1]})`,
-          detail: who,
-          severity: SENSITIVE[p][0],
-          device_id: id,
-        })
-      }
-    }
-  }
+  touched.add(id)
+  hostAlerts.push(...sensitivePortAlerts(h, prev, SENSITIVE))
+  await raise(hostAlerts, id)
   // upsert (nécessite l'index unique services_device_port_uq), puis suppression des seuls ports fermés :
   // une coupure en cours de route ne fait plus perdre toutes les données de l'appareil.
   if (h.ports.length) {
@@ -263,31 +264,22 @@ for (const h of alive) {
   }
 }
 
-const seen = new Set(alive.map((h) => h.ip))
 // Un appareil absent n'est déclaré « Hors ligne » qu'après 90 minutes sans être vu
 // (évite le va-et-vient des téléphones et objets connectés qui s'endorment entre deux scans).
+// L'absence se juge par appareil rapproché (MAC), pas par IP : un appareil dont l'adresse a été reprise
+// par un autre n'est plus considéré comme présent.
 const GRACE_MS = 90 * 60 * 1000
-const lastSeenMs = (d) => (d.last_seen ? new Date(d.last_seen).getTime() : 0)
-let off = 0
-let pending = 0
-for (const d of existing) {
-  if (d.ip && inRange(d.ip) && !seen.has(d.ip) && d.status !== 'off') {
-    if (Date.now() - lastSeenMs(d) > GRACE_MS) {
-      must(await sb.from('devices').update({ status: 'off' }).eq('id', d.id))
-      off++
-    } else {
-      pending++
-    }
-  }
-}
+const { off: offIds, pending } = planOffline(existing, touched, inRange, Date.now(), GRACE_MS)
+for (const id of offIds) must(await sb.from('devices').update({ status: 'off' }).eq('id', id))
+const off = offIds.length
 
 if (baseline) {
   console.log('    Premier inventaire : aucune alerte créée (référence de départ).')
-} else if (alerts.length && !NO_ALERTS) {
-  const r = await sb.from('alerts').insert(alerts)
-  if (r.error) console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_hardening.sql ?)')
-  else console.log(`    ${alerts.length} alerte(s) créée(s)`)
-} else {
+} else if (NO_ALERTS) {
+  console.log('    Alertes désactivées pour ce lancement (--no-alerts).')
+} else if (alertCount) {
+  console.log(`    ${alertCount} alerte(s) créée(s)`)
+} else if (!alertErrors) {
   console.log('    Aucune nouvelle alerte.')
 }
 

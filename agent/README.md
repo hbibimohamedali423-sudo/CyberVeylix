@@ -6,6 +6,8 @@ Inventorie les appareils de **votre** réseau local et les envoie à votre compt
 - Ping + table ARP sur une plage privée (10/8, 172.16/12, 192.168/16, de /22 à /30).
 - Connexion TCP simple sur ~23 ports courants (aucune exploitation, aucun envoi de données).
 - Met à jour `devices` (statut, MAC, dernier vu) et `services` (ports ouverts).
+- Identité d'un appareil = son adresse MAC : il est suivi même si son IP change (DHCP) ; une MAC inconnue sur une IP déjà utilisée crée un **nouvel** appareil et une alerte qui cite l'ancien occupant.
+- Un appareil ajouté à la main n'est jamais déclaré « Hors ligne » tant que l'agent ne l'a pas vu.
 - Les appareils de la plage non vus passent « Hors ligne ».
 
 ## Alertes automatiques
@@ -19,7 +21,7 @@ Inventorie les appareils de **votre** réseau local et les envoie à votre compt
 Il ne détecte pas de vulnérabilités (CVE) et ne bloque aucune menace.
 
 ## Utilisation
-1. Exécuter `supabase/schema_scan.sql` dans Supabase.
+1. Exécuter dans Supabase > SQL Editor, dans cet ordre : `supabase/schema_scan.sql`, `supabase/schema_hardening.sql`, puis `supabase/schema_status.sql` (suivi des alertes et vulnérabilités). Vérifier ensuite avec `npm run agent:check`.
 2. Copier `agent/.env.example` vers `agent/.env` et le remplir (clé anon uniquement, jamais service_role).
 3. Lancer depuis la racine du projet :
 ```
