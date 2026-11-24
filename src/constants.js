@@ -42,3 +42,8 @@ export const CATS = [
   { k: 'c2', label: 'C2 / Command & Control', color: 'var(--cat-c2)' },
   { k: 'autre', label: 'Autres', color: 'var(--cat-other)' },
 ]
+// R3 — origines enregistrées (colonne source, valeur par défaut « manual » côté base).
+export const VULN_SOURCES = ['manual', 'scan']
+export const ALERT_SOURCES = ['sensor', 'honeypot', 'vuln_scan', 'agent', 'manual']
+// Niveaux de confiance écrits par l'analyse (contrainte vulnerabilities_confidence_check).
+export const CONFIDENCE = ['certaine', 'probable', 'à vérifier']

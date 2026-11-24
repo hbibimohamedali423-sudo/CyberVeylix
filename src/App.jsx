@@ -13,6 +13,9 @@ import DevicesPage from './components/DevicesPage'
 import AlertsPage from './components/AlertsPage'
 import VulnsPage from './components/VulnsPage'
 import InstallPage from './components/InstallPage'
+import SensorCard from './components/SensorCard'
+import ReportPage from './components/ReportPage'
+import { isMissingTableMessage } from './lib/findings.js'
 import { TYPES, STATUS, SEV, CATS } from './constants'
 import { useI18n } from './i18n/context.js'
 import { LanguageSelect } from './i18n/index.jsx'
@@ -25,10 +28,13 @@ function Dashboard({ user }) {
   const thr = useRows('threats', user)
   const srv = useRows('services', user)
   const net = useRows('networks', user)
+  const sen = useRows('sensors', user)
+  // Table sensors absente tant que schema_r1_results.sql n'est pas exécuté : pas une panne.
+  const sensorsMissing = isMissingTableMessage(sen.error)
   const [modal, setModal] = useState(null)
   const [page, setPage] = useState('home')
   const close = () => setModal(null)
-  const error = dev.error || vul.error || alr.error || thr.error || srv.error || net.error
+  const error = dev.error || vul.error || alr.error || thr.error || srv.error || net.error || (sensorsMissing ? '' : sen.error)
   const connected = !error
   // Détache explicitement les appareils avant de supprimer un réseau : la suppression reste
   // sans effet destructif même si la contrainte FK réelle n'est pas « on delete set null ».
@@ -52,6 +58,7 @@ function Dashboard({ user }) {
         {page === 'home' ? (<>
         <main className="main">
           <Kpis counts={[dev.loaded ? dev.rows.length : null, thr.loaded ? thr.rows.filter((t) => t.blocked).length : null, vul.loaded ? vul.rows.filter((v) => (v.status || 'open') !== 'resolved').length : null, srv.loaded ? srv.rows.length : null]} />
+          <SensorCard sensors={sen.rows} loaded={sen.loaded} missing={sensorsMissing} />
           <section className="mid">
             <TopologySummary devices={dev.rows} networks={net.rows} loaded={dev.loaded && net.loaded} lastScan={lastScan} onOpen={() => setPage('topology')} />
             <Activity />
@@ -68,6 +75,7 @@ function Dashboard({ user }) {
             <DevicesPage
               devices={dev.rows}
               services={srv.rows}
+              vulns={vul.rows}
               networks={net.rows}
               onAddClick={() => setModal('dev')}
               onUpdate={dev.update}
@@ -88,7 +96,13 @@ function Dashboard({ user }) {
           </main>
         ) : page === 'install' ? (
           <main className="main wide">
+            <SensorCard sensors={sen.rows} loaded={sen.loaded} missing={sensorsMissing} />
             <InstallPage />
+          </main>
+        ) : page === 'reports' ? (
+          <main className="main wide">
+            <ReportPage email={user.email} devices={dev.rows} services={srv.rows} vulns={vul.rows}
+              alerts={alr.rows} sensors={sen.rows} sensorsMissing={sensorsMissing} />
           </main>
         ) : (
           <main className="main wide">

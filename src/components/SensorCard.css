@@ -1,0 +1,8 @@
+.sensor-card ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:10px}
+.sensor-card li{display:flex;gap:10px;align-items:flex-start}
+.sensor-card .sensor-dot{width:10px;height:10px;border-radius:50%;margin-top:4px;flex:none;background:var(--status-un)}
+.sensor-card .sensor-running .sensor-dot{background:var(--status-on)}
+.sensor-card .sensor-stopped .sensor-dot{background:var(--status-off)}
+.sensor-card .sensor-state{font-size:12px;margin:2px 0}
+.sensor-card .sensor-running .sensor-state{color:var(--success-ink)}
+.sensor-card .sensor-stopped .sensor-state{color:var(--danger-ink)}

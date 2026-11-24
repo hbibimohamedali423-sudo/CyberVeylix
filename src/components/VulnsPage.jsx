@@ -1,5 +1,7 @@
-import { useState } from 'react'
-import { ALERT_STATUS, SEV } from '../constants'
+import { Fragment, useState } from 'react'
+import { ALERT_STATUS, SEV, VULN_SOURCES } from '../constants'
+import { sourceOf } from '../lib/findings.js'
+import { CveLinks, ConfidenceLabel } from './FindingBits.jsx'
 import { useI18n } from '../i18n/context.js'
 import './VulnsPage.css'
 
@@ -27,6 +29,8 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
   const { t, locale } = useI18n()
   const [sev, setSev] = useState('')
   const [status, setStatus] = useState('')
+  const [src, setSrc] = useState('')
+  const [openId, setOpenId] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState('')
   const [editId, setEditId] = useState(null)
@@ -34,7 +38,7 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
   const [form, setForm] = useState(() => ({ ...blank }))
 
   const list = vulns
-    .filter((v) => (!sev || v.severity === sev) && (!status || stateOf(v) === status))
+    .filter((v) => (!sev || v.severity === sev) && (!status || stateOf(v) === status) && (!src || sourceOf(v) === src))
     .sort(newestFirst)
 
   // On repasse toujours l’identifiant réel de l’appareil (type inchangé, uuid ou entier).
@@ -145,6 +149,12 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
             {ALERT_STATUS.map((s) => <option key={s.k} value={s.k}>{t(`alertStatus.${s.k}`)}</option>)}
           </select>
         </label>
+        <label>{t('sources.filter')}
+          <select value={src} onChange={(e) => setSrc(e.target.value)}>
+            <option value="">{t('sources.all')}</option>
+            {VULN_SOURCES.map((k) => <option key={k} value={k}>{t(`sources.${k}`)}</option>)}
+          </select>
+        </label>
       </div>
 
       {err && <div className="vulns-err" role="alert">{err}</div>}
@@ -153,7 +163,7 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
         <table className="vulns-dt">
           <thead>
             <tr>
-              <th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('vulnsPage.colDevice')}</th><th>{t('vulnsPage.colNote')}</th>
+              <th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('vulnsPage.colDevice')}</th><th>{t('sources.col')}</th><th>{t('vulnDetail.colCve')}</th><th>{t('vulnDetail.colConfidence')}</th><th>{t('vulnsPage.colNote')}</th>
               <th>{t('alertsPage.colCreated')}</th><th>{t('alertsPage.colAck')}</th><th>{t('alertsPage.colResolved')}</th><th>{t('alertsPage.colActions')}</th>
             </tr>
           </thead>
@@ -182,6 +192,9 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
                       {devices.map((d) => <option key={d.id} value={d.id}>{d.name} — {d.ip || '—'}</option>)}
                     </select>
                   </td>
+                  <td>{t(`sources.${sourceOf(v)}`)}</td>
+                  <td><CveLinks row={v} /></td>
+                  <td><ConfidenceLabel value={v.confidence} /></td>
                   <td>
                     <textarea aria-label={t('vulnsPage.ariaNote', { title: v.title })} value={draft.note}
                       onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
@@ -198,16 +211,25 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
                   </td>
                 </tr>
               ) : (
-                <tr key={v.id}>
+                <Fragment key={v.id}>
+                <tr>
                   <td>{v.title}</td>
                   <td><span style={{ color: s?.color || 'var(--m)' }}>● {s ? t(`sev.${v.severity}`) : (v.severity || '—')}</span></td>
                   <td><span style={{ color: st?.color || 'var(--m)' }}>● {st ? t(`alertStatus.${stateOf(v)}`) : stateOf(v)}</span></td>
                   <td>{deviceLabel(v.device_id)}</td>
+                  <td>{VULN_SOURCES.includes(sourceOf(v)) ? t(`sources.${sourceOf(v)}`) : sourceOf(v)}</td>
+                  <td><CveLinks row={v} /></td>
+                  <td><ConfidenceLabel value={v.confidence} /></td>
                   <td className="note">{v.note || '—'}</td>
                   <td>{when(v.created_at, locale)}</td>
                   <td>{when(v.acknowledged_at, locale)}</td>
                   <td>{when(v.resolved_at, locale)}</td>
                   <td className="acts">
+                    <button type="button" className="ghost" aria-expanded={openId === v.id}
+                      aria-label={t('vulnDetail.ariaToggle', { title: v.title })}
+                      onClick={() => setOpenId(openId === v.id ? null : v.id)}>
+                      {openId === v.id ? t('vulnDetail.hide') : t('vulnDetail.show')}
+                    </button>
                     {stateOf(v) === 'open' && (
                       <button type="button" className="ack" disabled={rowBusy}
                         aria-label={t('alertsPage.ariaAck', { title: v.title })} onClick={() => acknowledge(v)}>
@@ -226,6 +248,20 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
                       aria-label={t('vulnsPage.ariaDelete', { title: v.title })} onClick={() => removeVuln(v)}>{t('common.delete')}</button>
                   </td>
                 </tr>
+                {openId === v.id && (
+                  <tr className="vulns-detail">
+                    <td colSpan={12}>
+                      <dl>
+                        <dt>{t('vulnDetail.evidence')}</dt><dd className="pre">{v.evidence || t('vulnDetail.none')}</dd>
+                        <dt>{t('vulnDetail.remediation')}</dt><dd className="pre">{v.remediation || t('vulnDetail.none')}</dd>
+                        <dt>{t('vulnDetail.service')}</dt>
+                        <dd><bdi dir="ltr">{v.port ? `${v.port}${v.service ? ` · ${v.service}` : ''}` : (v.service || '—')}</bdi></dd>
+                        <dt>{t('vulnDetail.lastSeen')}</dt><dd>{when(v.last_seen, locale)}</dd>
+                      </dl>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               )
             })}
           </tbody>

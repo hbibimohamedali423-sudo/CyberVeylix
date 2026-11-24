@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ALERT_STATUS, NETWORK_FILTER_NONE, SEV } from '../constants'
+import { ALERT_SOURCES, ALERT_STATUS, NETWORK_FILTER_NONE, SEV } from '../constants'
+import { sourceOf } from '../lib/findings.js'
 import { useI18n } from '../i18n/context.js'
 import './AlertsPage.css'
 
@@ -27,6 +28,7 @@ export default function AlertsPage({ alerts, networks = [], onUpdate }) {
   const [sev, setSev] = useState('')
   const [status, setStatus] = useState('')
   const [networkFilter, setNetworkFilter] = useState('')
+  const [src, setSrc] = useState('')
   const [err, setErr] = useState('')
   const [busyId, setBusyId] = useState(null)
 
@@ -39,6 +41,7 @@ export default function AlertsPage({ alerts, networks = [], onUpdate }) {
   const list = alerts
     .filter((a) => (!sev || a.severity === sev)
       && (!status || stateOf(a) === status)
+      && (!src || sourceOf(a) === src)
       && (!networkFilter
         || (networkFilter === NETWORK_FILTER_NONE ? !a.network_id : a.network_id === networkFilter)))
     .sort(newestFirst)
@@ -89,13 +92,19 @@ export default function AlertsPage({ alerts, networks = [], onUpdate }) {
             <option value={NETWORK_FILTER_NONE}>{t('networks.noNetwork')}</option>
           </select>
         </label>
+        <label>{t('sources.filter')}
+          <select value={src} onChange={(e) => setSrc(e.target.value)}>
+            <option value="">{t('sources.all')}</option>
+            {ALERT_SOURCES.map((k) => <option key={k} value={k}>{t(`sources.${k}`)}</option>)}
+          </select>
+        </label>
       </div>
       {err && <div className="alerts-err" role="alert">{err}</div>}
       <div className="alerts-tw">
         <table className="alerts-dt">
           <thead>
             <tr>
-              <th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colNetwork')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('alertsPage.colDetail')}</th>
+              <th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colNetwork')}</th><th>{t('sources.col')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('alertsPage.colDetail')}</th>
               <th>{t('alertsPage.colCreated')}</th><th>{t('alertsPage.colAck')}</th><th>{t('alertsPage.colResolved')}</th><th>{t('alertsPage.colActions')}</th>
             </tr>
           </thead>
@@ -108,6 +117,7 @@ export default function AlertsPage({ alerts, networks = [], onUpdate }) {
                 <tr key={a.id}>
                   <td>{a.title}</td>
                   <td>{networkName(a.network_id)}</td>
+                  <td>{ALERT_SOURCES.includes(sourceOf(a)) ? t(`sources.${sourceOf(a)}`) : sourceOf(a)}</td>
                   <td><span style={{ color: s?.color || 'var(--m)' }}>● {s ? t(`sev.${a.severity}`) : (a.severity || '—')}</span></td>
                   <td><span style={{ color: st?.color || 'var(--m)' }}>● {st ? t(`alertStatus.${stateOf(a)}`) : stateOf(a)}</span></td>
                   <td className="detail">{a.detail || '—'}</td>
