@@ -73,6 +73,19 @@ considéré comme corrigé). Avec `--push`, les faiblesses rejoignent la page «
 **Limites** : la base de règles est courte et vérifiée, pas exhaustive. L'absence de résultat ne prouve pas
 l'absence de vulnérabilité.
 
+## Inventaire et identification des appareils
+Avec `--push`, le capteur inventorie son réseau toutes les 5 minutes (premier passage 1 min après le démarrage) :
+- **Réseau** : enregistré dans `networks` pour la MAC de passerelle confirmée à l'installation (nom = client),
+  avec son sous-réseau (ex. `10.15.0.0/16`). Jamais pour une MAC simplement apprise ou annoncée par un tiers.
+- **Appareils** : chaque MAC vue (ARP cohérent, demandes DHCP) devient un appareil du réseau, suivi par sa MAC
+  même si son IP change. « Hors ligne » après 2 h d'absence (appareils découverts par le capteur seulement).
+- **Identification** (rôle + type + confiance + preuve, colonne `role_evidence` « Capteur : … ») : fabricant
+  (registre IEEE, paquet `oui-data`), nom et système annoncés en DHCP (« android-dhcp », « MSFT 5.0 »…), ports
+  relevés par l'analyse, MAC aléatoire (téléphones récents). Sans indice : rien n'est inventé.
+- Un nom, un type ou un rôle saisis à la main ne sont **jamais** écrasés.
+- Limite : un PC seul ne voit pas sur quel port de switch ni sur quel point Wi-Fi chaque appareil est branché ;
+  cela demande la lecture des switchs (SNMP, en lecture seule).
+
 ## Interface (tableau de bord)
 L'installateur place le tableau de bord dans le dossier `ui` et le capteur le sert lui-même : aucun site
 externe à installer. Sur le PC : raccourci **CyberVeylix** sur le Bureau, ou `http://localhost:8710`.

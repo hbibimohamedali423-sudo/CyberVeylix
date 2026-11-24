@@ -64,6 +64,25 @@ const ICONS = {
   'Accès Internet': (
     <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
   ),
+  Téléphone: (
+    <>
+      <rect x="6.5" y="2.5" width="11" height="19" rx="2" />
+      <path d="M11 18h2" />
+    </>
+  ),
+  Imprimante: (
+    <>
+      <path d="M6 9V3h12v6" />
+      <rect x="3" y="9" width="18" height="8" rx="2" />
+      <path d="M6 14h12v7H6z" />
+    </>
+  ),
+  'Objet connecté': (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14" />
+    </>
+  ),
   __lan: (
     <>
       <rect x="2.5" y="8" width="19" height="8" rx="2" />

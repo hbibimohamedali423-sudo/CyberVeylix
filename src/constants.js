@@ -8,7 +8,7 @@ export const KPIS = [
   { key: 'services', cls: '' },
 ]
 // Couleurs pilotées par le thème (valeurs sombres et claires définies dans index.css).
-export const TYPES = { 'Serveur': 'var(--type-server)', 'Poste': 'var(--type-workstation)', 'Caméra': 'var(--type-camera)', 'Équipement réseau': 'var(--type-network)', 'Accès Internet': 'var(--type-internet)' }
+export const TYPES = { 'Serveur': 'var(--type-server)', 'Poste': 'var(--type-workstation)', 'Caméra': 'var(--type-camera)', 'Équipement réseau': 'var(--type-network)', 'Accès Internet': 'var(--type-internet)', 'Téléphone': 'var(--type-phone)', 'Imprimante': 'var(--type-printer)', 'Objet connecté': 'var(--type-iot)' }
 // Ports jugés sensibles par l’agent de découverte (même liste que agent/scan.mjs, SENSITIVE).
 export const SENSITIVE_PORTS = [21, 23, 3389, 5900, 1433, 3306, 5432]
 // Valeur de filtre réservée aux lignes dont network_id est null.

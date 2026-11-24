@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react'
 import { ALERT_STATUS, NETWORK_FILTER_NONE, SEV, STATUS, TYPES } from '../constants'
-import { CveLinks } from './FindingBits.jsx'
+import { CveLinks, ConfidenceLabel } from './FindingBits.jsx'
 import { useI18n } from '../i18n/context.js'
 import './DevicesPage.css'
 
@@ -140,7 +140,7 @@ export default function DevicesPage({
               ) : (
                 <Fragment key={d.id}>
                 <tr>
-                  <td>{d.name}</td>
+                  <td>{d.name}{(d.vendor || d.hostname) && <div className="m">{[d.vendor, d.hostname && d.hostname !== d.name ? d.hostname : null].filter(Boolean).join(' · ')}</div>}</td>
                   <td>{d.ip || '—'}{d.mac && <div className="m">{d.mac}</div>}</td>
                   <td>{networkLabel(d.network_id)}</td>
                   <td>{typeLabelOf(t, d.type)}</td>
@@ -154,7 +154,7 @@ export default function DevicesPage({
                 </tr>
                 {openId === d.id && (
                   <tr className="dev-detail"><td colSpan={8}>
-                    <DeviceDetail services={services.filter((x) => x.device_id === d.id)} vulns={vulns.filter((v) => v.device_id === d.id)} />
+                    <DeviceDetail device={d} services={services.filter((x) => x.device_id === d.id)} vulns={vulns.filter((v) => v.device_id === d.id)} />
                   </td></tr>
                 )}
                 </Fragment>
@@ -177,13 +177,28 @@ export default function DevicesPage({
 const byPort = (a, b) => (Number(a.port) || 0) - (Number(b.port) || 0)
 
 // Services enregistrés (port, version annoncée) et vulnérabilités liées à l'appareil.
-function DeviceDetail({ services, vulns }) {
+const ROLES = ['gateway', 'switch', 'access_point', 'server', 'workstation', 'printer', 'camera', 'iot', 'phone', 'other']
+// Identification automatique (capteur) : la preuve est stockée avec le préfixe « Capteur : ».
+const evidenceText = (v) => String(v || '').replace(/^Capteur : /, '')
+
+function DeviceDetail({ device = {}, services, vulns }) {
   const { t, locale } = useI18n()
   const when = (v) => (v ? new Date(v).toLocaleString(locale) : '—')
   const sevOf = (k) => SEV.find((x) => x.k === k)
   const stOf = (k) => ALERT_STATUS.find((x) => x.k === k)
   return (
     <div className="dev-detail-grid">
+      <section className="dev-ident">
+        <h4>{t('ident.title')}</h4>
+        <dl>
+          <dt>{t('ident.vendor')}</dt><dd>{device.vendor || (device.mac && /^[0-9a-f][26ae]:/i.test(device.mac) ? t('ident.randomMac') : '—')}</dd>
+          <dt>{t('ident.hostname')}</dt><dd dir="auto">{device.hostname || '—'}</dd>
+          <dt>{t('ident.mac')}</dt><dd dir="ltr">{device.mac || '—'}</dd>
+          <dt>{t('ident.role')}</dt><dd>{device.role && ROLES.includes(device.role) ? t(`ident.roles.${device.role}`) : '—'}</dd>
+          <dt>{t('ident.confidence')}</dt><dd><ConfidenceLabel value={device.role_confidence} /></dd>
+          <dt>{t('ident.evidence')}</dt><dd>{device.role_evidence ? evidenceText(device.role_evidence) : '—'}</dd>
+        </dl>
+      </section>
       <section>
         <h4>{t('deviceDetail.services')} ({services.length})</h4>
         {!services.length ? <p className="m">{t('deviceDetail.noServices')}</p> : (

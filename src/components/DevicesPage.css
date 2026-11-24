@@ -65,3 +65,8 @@
 .dev-sub td,.dev-sub td:not(:first-child){text-align:start;color:var(--t);padding:6px;border-bottom:1px solid var(--row-border)}
 .dev-sub a{color:var(--accent-ink)}
 @media(max-width:1100px){.dev-detail-grid{grid-template-columns:1fr}}
+
+.dev-detail-grid .dev-ident{grid-column:1 / -1}
+.dev-ident dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0;font-size:12px}
+.dev-ident dt{color:var(--m)}
+.dev-ident dd{margin:0;color:var(--t)}

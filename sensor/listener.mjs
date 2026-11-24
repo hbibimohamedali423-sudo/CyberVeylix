@@ -11,12 +11,12 @@
 import { createRequire } from 'node:module'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { hostname } from 'node:os'
+import { hostname, networkInterfaces } from 'node:os'
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, rmSync, statSync, renameSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArp } from './lib/parse-arp.mjs'
-import { parseDhcpServerReply } from './lib/parse-dhcp.mjs'
+import { parseDhcpServerReply, parseDhcpClientRequest } from './lib/parse-dhcp.mjs'
 import { createDetectors } from './lib/detectors.mjs'
 import { parseConfigText, resolveOptions, effectiveLearnMinutes } from './lib/options.mjs'
 import { createHoneypotMonitor } from './lib/honeypot-monitor.mjs'
@@ -29,6 +29,8 @@ import { startWebServer } from './lib/web-server.mjs'
 import { createCommandRunner } from './lib/commands.mjs'
 import { createActions } from './lib/actions.mjs'
 import { createLocalFixes } from './lib/fixes.mjs'
+import { createInventory, cidrOf } from './lib/inventory.mjs'
+import { createOui } from './lib/oui.mjs'
 import { createBlocker } from './lib/blocker.mjs'
 import dns from 'node:dns/promises'
 
@@ -55,7 +57,8 @@ const DATA = opts.dataDir || join(HERE, 'data')
 const BASELINE_FILE = join(DATA, 'baseline.json')
 const EVENTS_FILE = join(DATA, 'events.jsonl')
 const EVENTS_MAX_BYTES = 20 * 1024 * 1024
-const FILTER = 'arp or (udp and src port 67)'
+// ARP + DHCP (réponses des serveurs ET demandes des appareils : nom et système annoncés, pour l'inventaire).
+const FILTER = 'arp or (udp and (src port 67 or src port 68))'
 
 // --- Chargement de Npcap / libpcap ------------------------------------------
 let Cap
@@ -133,6 +136,9 @@ const detectors = createDetectors({
   trustedDhcpServers: saved?.trustedDhcpServers || [],
   bindings: saved?.bindings || [],
 })
+
+// Inventaire (lib/inventory.mjs) : créé AVANT la capture, connecté à la base plus tard (setClient).
+const inventory = createInventory({ oui: createOui() })
 
 function saveBaseline() {
   const s = detectors.snapshot()
@@ -251,10 +257,17 @@ if (opts.honeypot) {
 cap.on('packet', (nbytes) => {
   const frame = Buffer.from(buffer.subarray(0, nbytes)) // copie : le tampon est réutilisé
   const now = Date.now()
+  const arp = parseArp(frame)
   const events = [
-    ...detectors.onArp(parseArp(frame), now),
+    ...detectors.onArp(arp, now),
     ...detectors.onDhcp(parseDhcpServerReply(frame), now),
   ]
+  // Inventaire : l'émetteur réel d'une trame ARP cohérente (pas une usurpation) et les demandes DHCP.
+  if (arp && arp.senderMac === arp.ethSrcMac) inventory.observe(arp.senderMac, arp.senderIp, now)
+  else {
+    const dhcpReq = parseDhcpClientRequest(frame)
+    if (dhcpReq) inventory.observeDhcp(dhcpReq, now)
+  }
   if (events.length) report(events)
 })
 
@@ -373,6 +386,36 @@ if (opts.ui) {
       .catch((e) => console.log(`⚠ Interface web non démarrée (port ${opts.uiPort}) : ${e.message}`))
   }
 }
+
+// Inventaire du réseau (réseau + appareils vus + identification) : toutes les 5 minutes, avec --push.
+// Le réseau n'est enregistré que pour la MAC de passerelle CONFIRMÉE (installateur) ou verrouillée par l'apprentissage.
+const ifaceInfo = (() => {
+  const d = Cap.deviceList().find((x) => x.name === device)
+  const a = d?.addresses.find((x) => x.addr === sensorIp && x.netmask)
+  const fromOs = Object.values(networkInterfaces()).flat().find((x) => x && x.address === sensorIp)
+  return { cidr: cidrOf(sensorIp, (a && a.netmask) || (fromOs && fromOs.netmask)), mac: fromOs && fromOs.mac ? fromOs.mac.toLowerCase() : null }
+})()
+inventory.setSubnet(ifaceInfo.cidr)
+let inventoryRunning = false
+async function inventoryOnce() {
+  if (!opts.push || inventoryRunning) return
+  inventoryRunning = true
+  try {
+    const p = await pusher()
+    if (!p) return
+    inventory.setClient(p.client)
+    const gatewayMac = opts.gatewayMac || saved?.gatewayMac || null
+    const networkId = await inventory.ensureNetwork({ gatewayMac, gatewayIp, name: config.client || null })
+    await inventory.sync({ networkId, gatewayIp, gatewayMac, sensorMac: ifaceInfo.mac })
+  } catch (e) {
+    console.log('⚠ Inventaire : ' + e.message)
+  } finally {
+    inventoryRunning = false
+  }
+}
+// Premier passage après 1 min (CV_TEST_INVENTORY_DELAY_MS : délai réduit pour le test d'intégration uniquement).
+setTimeout(inventoryOnce, Number(process.env.CV_TEST_INVENTORY_DELAY_MS) || 60 * 1000).unref()
+setInterval(inventoryOnce, 5 * 60 * 1000).unref()
 
 // Demandes de la page web (table sensor_commands) : « Analyser maintenant ». Liste blanche de gestionnaires ;
 // tout autre type reçoit un refus explicite (les blocages et corrections arrivent dans une version ultérieure).
