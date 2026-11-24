@@ -298,6 +298,32 @@ export const MESSAGES = {
         rate_limit: "limite de blocages automatiques atteinte",
       },
     },
+    fixes: {
+      button: "Corriger",
+      pending: "Correction en cours…",
+      unavailable: "Le capteur de ce PC est arrêté : correction impossible.",
+      ariaFix: "Corriger « {{title}} »",
+      confirm: "« {{name}} » sur l’ordinateur « {{sensor}} ».\n\n{{what}}\n\nContinuer ? Le capteur vérifiera ensuite que la faiblesse a disparu.",
+      smbv1: {
+        name: "Désactiver SMBv1",
+        what: "Désactive le protocole SMBv1 sur cet ordinateur (effet immédiat, sans redémarrage). Les très anciens appareils (Windows XP, vieux NAS ou scanners) ne pourront plus accéder aux dossiers partagés.",
+      },
+      rdp_nla: {
+        name: "Exiger NLA pour le Bureau à distance",
+        what: "Exige l’authentification réseau (NLA) pour se connecter au Bureau à distance de cet ordinateur. Les sessions déjà ouvertes ne sont pas coupées ; les très anciens clients sans NLA ne pourront plus se connecter.",
+      },
+      telnet: {
+        name: "Arrêter et désactiver Telnet",
+        what: "Arrête le service Telnet de cet ordinateur et l’empêche de redémarrer. Plus personne ne pourra s’y connecter en Telnet.",
+      },
+      result: {
+        fix_done: "Correction « {{name}} » appliquée et vérifiée.",
+        fix_already: "« {{name}} » : déjà corrigé, rien à faire.",
+      },
+      reason: {
+        unknown_fix: "correction inconnue",
+      },
+    },
     status: { on: 'En ligne', off: 'Hors ligne', un: 'Inconnu' },
     sev: { c: 'Critique', h: 'Haute', m: 'Moyenne', l: 'Basse' },
     cats: { intrusion: 'Tentatives d’intrusion', malware: 'Malware / Ransomware', scan: 'Scan de ports', c2: 'C2 / Command & Control', autre: 'Autres' },
@@ -588,6 +614,32 @@ export const MESSAGES = {
         dns_service: "it is a dashboard address",
         unsupported_os: "blocking is available on Windows only",
         rate_limit: "automatic blocking limit reached",
+      },
+    },
+    fixes: {
+      button: "Fix",
+      pending: "Fixing…",
+      unavailable: "The sensor on this PC is stopped: the fix is not possible.",
+      ariaFix: "Fix “{{title}}”",
+      confirm: "“{{name}}” on computer “{{sensor}}”.\n\n{{what}}\n\nContinue? The sensor will then check that the weakness is gone.",
+      smbv1: {
+        name: "Disable SMBv1",
+        what: "Disables the SMBv1 protocol on this computer (immediate, no restart). Very old devices (Windows XP, old NAS or scanners) will no longer be able to access shared folders.",
+      },
+      rdp_nla: {
+        name: "Require NLA for Remote Desktop",
+        what: "Requires network-level authentication (NLA) to connect to this computer’s Remote Desktop. Sessions already open are not cut; very old clients without NLA will no longer be able to connect.",
+      },
+      telnet: {
+        name: "Stop and disable Telnet",
+        what: "Stops this computer’s Telnet service and prevents it from starting again. Nobody will be able to connect to it by Telnet any more.",
+      },
+      result: {
+        fix_done: "Fix “{{name}}” applied and verified.",
+        fix_already: "“{{name}}”: already fixed, nothing to do.",
+      },
+      reason: {
+        unknown_fix: "unknown fix",
       },
     },
     status: { on: 'Online', off: 'Offline', un: 'Unknown' },
@@ -882,6 +934,32 @@ export const MESSAGES = {
         rate_limit: "Grenze für automatische Sperren erreicht",
       },
     },
+    fixes: {
+      button: "Beheben",
+      pending: "Behebung läuft…",
+      unavailable: "Der Sensor dieses PCs ist gestoppt: Behebung nicht möglich.",
+      ariaFix: "„{{title}}“ beheben",
+      confirm: "„{{name}}“ auf dem Computer „{{sensor}}“.\n\n{{what}}\n\nFortfahren? Der Sensor prüft anschließend, ob die Schwachstelle verschwunden ist.",
+      smbv1: {
+        name: "SMBv1 deaktivieren",
+        what: "Deaktiviert das SMBv1-Protokoll auf diesem Computer (sofort, ohne Neustart). Sehr alte Geräte (Windows XP, alte NAS oder Scanner) können dann nicht mehr auf freigegebene Ordner zugreifen.",
+      },
+      rdp_nla: {
+        name: "NLA für Remotedesktop verlangen",
+        what: "Verlangt die Authentifizierung auf Netzwerkebene (NLA) für Verbindungen zum Remotedesktop dieses Computers. Bereits geöffnete Sitzungen bleiben bestehen; sehr alte Clients ohne NLA können sich nicht mehr verbinden.",
+      },
+      telnet: {
+        name: "Telnet beenden und deaktivieren",
+        what: "Beendet den Telnet-Dienst dieses Computers und verhindert den Neustart. Niemand kann sich dann noch per Telnet verbinden.",
+      },
+      result: {
+        fix_done: "Behebung „{{name}}“ angewendet und geprüft.",
+        fix_already: "„{{name}}“: bereits behoben, nichts zu tun.",
+      },
+      reason: {
+        unknown_fix: "unbekannte Behebung",
+      },
+    },
     status: { on: 'Online', off: 'Offline', un: 'Unbekannt' },
     sev: { c: 'Kritisch', h: 'Hoch', m: 'Mittel', l: 'Niedrig' },
     cats: { intrusion: 'Eindringversuche', malware: 'Malware / Ransomware', scan: 'Port-Scan', c2: 'C2 / Command & Control', autre: 'Sonstige' },
@@ -1172,6 +1250,32 @@ export const MESSAGES = {
         dns_service: "هذا عنوان خاص بلوحة التحكم",
         unsupported_os: "الحجب متاح على Windows فقط",
         rate_limit: "بلغ الحجب التلقائي حدّه المسموح",
+      },
+    },
+    fixes: {
+      button: "أصلح",
+      pending: "جارٍ الإصلاح…",
+      unavailable: "حساس هذا الحاسوب متوقف: الإصلاح غير ممكن.",
+      ariaFix: "إصلاح «{{title}}»",
+      confirm: "«{{name}}» على الحاسوب «{{sensor}}».\n\n{{what}}\n\nهل تريد المتابعة؟ سيتحقق الحساس بعد ذلك من زوال الثغرة.",
+      smbv1: {
+        name: "تعطيل SMBv1",
+        what: "يعطّل بروتوكول SMBv1 على هذا الحاسوب (فوريًا ودون إعادة تشغيل). لن تتمكن الأجهزة القديمة جدًا (Windows XP أو أجهزة NAS والماسحات القديمة) من الوصول إلى المجلدات المشتركة.",
+      },
+      rdp_nla: {
+        name: "اشتراط NLA لسطح المكتب البعيد",
+        what: "يشترط المصادقة على مستوى الشبكة (NLA) للاتصال بسطح المكتب البعيد لهذا الحاسوب. لا تُقطع الجلسات المفتوحة حاليًا، أما العملاء القدماء جدًا بدون NLA فلن يتمكنوا من الاتصال.",
+      },
+      telnet: {
+        name: "إيقاف Telnet وتعطيله",
+        what: "يوقف خدمة Telnet على هذا الحاسوب ويمنعها من العمل مجددًا. لن يستطيع أحد الاتصال به عبر Telnet بعد ذلك.",
+      },
+      result: {
+        fix_done: "طُبّق الإصلاح «{{name}}» وجرى التحقق منه.",
+        fix_already: "«{{name}}»: مُصلَح مسبقًا ولا شيء لفعله.",
+      },
+      reason: {
+        unknown_fix: "إصلاح غير معروف",
       },
     },
     status: { on: 'متصل', off: 'غير متصل', un: 'غير معروف' },
@@ -1465,6 +1569,32 @@ export const MESSAGES = {
         dns_service: "è un indirizzo della dashboard",
         unsupported_os: "blocco disponibile solo su Windows",
         rate_limit: "limite dei blocchi automatici raggiunto",
+      },
+    },
+    fixes: {
+      button: "Correggi",
+      pending: "Correzione in corso…",
+      unavailable: "Il sensore di questo PC è fermo: correzione impossibile.",
+      ariaFix: "Correggi «{{title}}»",
+      confirm: "«{{name}}» sul computer «{{sensor}}».\n\n{{what}}\n\nContinuare? Il sensore verificherà poi che il punto debole sia scomparso.",
+      smbv1: {
+        name: "Disattivare SMBv1",
+        what: "Disattiva il protocollo SMBv1 su questo computer (immediato, senza riavvio). I dispositivi molto vecchi (Windows XP, vecchi NAS o scanner) non potranno più accedere alle cartelle condivise.",
+      },
+      rdp_nla: {
+        name: "Richiedere NLA per il Desktop remoto",
+        what: "Richiede l’autenticazione a livello di rete (NLA) per connettersi al Desktop remoto di questo computer. Le sessioni già aperte non vengono interrotte; i client molto vecchi senza NLA non potranno più connettersi.",
+      },
+      telnet: {
+        name: "Arrestare e disattivare Telnet",
+        what: "Arresta il servizio Telnet di questo computer e ne impedisce il riavvio. Nessuno potrà più collegarsi tramite Telnet.",
+      },
+      result: {
+        fix_done: "Correzione «{{name}}» applicata e verificata.",
+        fix_already: "«{{name}}»: già corretto, nulla da fare.",
+      },
+      reason: {
+        unknown_fix: "correzione sconosciuta",
       },
     },
     status: { on: 'Online', off: 'Offline', un: 'Sconosciuto' },

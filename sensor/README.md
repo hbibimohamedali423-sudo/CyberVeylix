@@ -89,8 +89,8 @@ Depuis un autre appareil du réseau local : `http://<nom du PC>:8710`.
 Avec l'envoi au tableau de bord (`--push`), le capteur consulte toutes les 5 s la table `sensor_commands`.
 La page « Analyse & Scan » y dépose une demande ; le capteur la réclame (une seule fois), l'exécute lui-même
 et écrit le résultat. Le navigateur n'exécute jamais rien sur le réseau.
-- **Liste blanche** : `scan_now` (analyse), `block_ip` et `unblock_ip` (blocage). Tout autre type (ex. correction)
-  est refusé explicitement (« non pris en charge »).
+- **Liste blanche** : `scan_now` (analyse), `block_ip` / `unblock_ip` (blocage) et `fix` (correction de CE PC).
+  Tout autre type est refusé explicitement (« non pris en charge »).
 - Une demande de plus de 15 minutes n'est pas exécutée (le capteur était éteint) ; une demande « en cours » lors
   d'un redémarrage est marquée en échec.
 - Ne vise que les appareils déjà connus du capteur, réseaux privés uniquement (comme l'analyse périodique).
@@ -108,10 +108,33 @@ victime imitée : seule la **MAC** est affichée, pour retrouver l'appareil.
   ou une tentative d'intrusion sur un leurre, 20 blocages par heure au plus, mêmes garde-fous.
 - La table `blocked_ips` est écrite par le capteur (résultat réel du pare-feu) ; les règles survivent au redémarrage.
 
+## Audit de ce PC et bouton « Corriger »
+Le PC du capteur n'est jamais analysé par le réseau (ses leurres ouverts fausseraient le résultat) : le capteur lit
+directement son état (lecture seule, 1 min après le démarrage, toutes les 6 h, et à chaque analyse) :
+SMBv1 activé, Bureau à distance sans NLA, service Telnet en cours d'exécution. Chaque faiblesse apparaît dans
+« Vulnérabilités » (clé `local:<pc>:<id>`, confiance « certaine ») avec un bouton **Corriger** :
+| Correction | Effet | Conséquence à connaître |
+|---|---|---|
+| `smbv1` | `Set-SmbServerConfiguration -EnableSMB1Protocol $false` | Très anciens appareils (XP, vieux NAS) privés de partages |
+| `rdp_nla` | Registre RDP-Tcp `UserAuthentication = 1` | Très anciens clients sans NLA refusés |
+| `telnet` | Arrêt et désactivation du service `TlntSvr` | Plus de connexion Telnet à ce PC |
+
+Scripts PowerShell **constants** (aucun texte venant de la page n'est exécuté). Avant d'agir, le capteur relit l'état ;
+après, il vérifie : il ne répond « corrigé » que si la faiblesse a réellement disparu, puis met la page à jour.
+Les autres appareils (caméras, imprimantes…) ne sont jamais modifiés à distance : leurs faiblesses gardent les
+instructions de correction.
+
+## Test d'intégration
+`npm run build` puis `npm run test:integration` lance le vrai `listener.mjs` avec une carte réseau simulée
+(`test/integration/stubmods/cap`) et une fausse base Supabase locale : pouls, interface servie, `/config.js` sans
+secret, et exécution des demandes (analyse, blocage refusé pour la passerelle, etc.).
+
 ## Ce qu'il ne fait pas
-- Il ne bloque rien et n'isole aucun appareil (les leurres observent, ils ne ripostent pas).
+- Il ne bloque rien de lui-même au niveau du réseau : le blocage (à votre demande, ou automatique si activé) ne concerne
+  que le pare-feu du PC du capteur.
 - Il ne voit que le trafic **diffusé** (ARP, DHCP) : il ne voit pas la navigation des autres appareils.
-- Il ne corrige pas lui-même les appareils : le rapport donne les corrections, l'analyse suivante vérifie qu'elles sont faites.
+- Il ne corrige jamais les AUTRES appareils : leur rapport donne les corrections, l'analyse suivante vérifie qu'elles sont faites.
+  Seul le PC du capteur peut être corrigé, à votre demande, avec les trois corrections ci-dessus.
 
 ## Installation (Windows)
 1. Installer **Node.js 20.6 ou plus récent**.

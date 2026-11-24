@@ -50,3 +50,17 @@ export function blockState(ip, blocked = [], commands = []) {
   if (commands.some((c) => (c.kind === 'block_ip' || c.kind === 'unblock_ip') && isActiveCommand(c) && c.params?.ip === ip)) return 'pending'
   return 'none'
 }
+
+// Correction possible pour une faiblesse de CE PC (audit local du capteur, clé « local:<pc>:<id> »).
+// Même nettoyage du nom de PC que sensor/lib/fixes.mjs (hostKey).
+export const hostKey = (name) => String(name || 'pc').toLowerCase().replace(/[^a-z0-9._-]/g, '-').slice(0, 63)
+export const FIX_IDS = ['smbv1', 'rdp_nla', 'telnet']
+export function localFixOf(vuln) {
+  const m = /^local:([a-z0-9._-]+):([a-z0-9_]+)$/.exec(vuln?.finding_key || '')
+  return m && FIX_IDS.includes(m[2]) ? { host: m[1], id: m[2] } : null
+}
+// Capteur qui a détecté la faiblesse (c'est lui, et lui seul, qui peut la corriger).
+export const fixSensorFor = (vuln, sensors = []) => {
+  const fix = localFixOf(vuln)
+  return fix ? sensors.find((s) => hostKey(s.name) === fix.host) || null : null
+}

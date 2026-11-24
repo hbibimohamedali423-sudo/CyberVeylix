@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react'
 import { ALERT_STATUS, SEV, VULN_SOURCES } from '../constants'
-import { sourceOf } from '../lib/findings.js'
+import { fixSensorFor, isActiveCommand, localFixOf, sensorState, sourceOf } from '../lib/findings.js'
 import { CveLinks, ConfidenceLabel } from './FindingBits.jsx'
 import { useI18n } from '../i18n/context.js'
 import './VulnsPage.css'
@@ -25,7 +25,7 @@ const newestFirst = (a, b) => {
 const find = (list, k) => list.find((x) => x.k === k)
 const blank = { title: '', severity: SEV[0].k, device: '', note: '' }
 
-export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, onRemove }) {
+export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, onRemove, sensors = [], commands = [], onCommand }) {
   const { t, locale } = useI18n()
   const [sev, setSev] = useState('')
   const [status, setStatus] = useState('')
@@ -75,6 +75,21 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
   const removeVuln = (v) => {
     if (!window.confirm(t('vulnsPage.confirmDelete', { title: v.title }))) return
     act(`del:${v.id}`, () => onRemove(v.id))
+  }
+
+  // Correction sur CE PC (liste blanche du capteur) : demande au capteur, qui exécute puis vérifie.
+  const fixOf = (v) => {
+    const fix = localFixOf(v)
+    if (!fix || !onCommand) return null
+    const sensor = fixSensorFor(v, sensors)
+    const pending = !!sensor && commands.some((c) => c.kind === 'fix' && isActiveCommand(c) && c.sensor_id === sensor.id && c.params?.id === fix.id)
+    return { ...fix, sensor, pending, ready: !!sensor && sensorState(sensor).state === 'running' }
+  }
+  const applyFix = (v) => {
+    const fix = fixOf(v)
+    if (!fix || !fix.ready) return
+    if (!window.confirm(t('fixes.confirm', { name: t(`fixes.${fix.id}.name`), sensor: fix.sensor.name, what: t(`fixes.${fix.id}.what`) }))) return
+    act(`fix:${v.id}`, () => onCommand(fix.sensor.id, 'fix', { id: fix.id }))
   }
 
   const startEdit = (v) => {
@@ -230,6 +245,16 @@ export default function VulnsPage({ vulns = [], devices = [], onAdd, onUpdate, o
                       onClick={() => setOpenId(openId === v.id ? null : v.id)}>
                       {openId === v.id ? t('vulnDetail.hide') : t('vulnDetail.show')}
                     </button>
+                    {stateOf(v) !== 'resolved' && fixOf(v) && (() => {
+                      const fx = fixOf(v)
+                      return (
+                        <button type="button" className="fix" disabled={rowBusy || fx.pending || !fx.ready}
+                          title={fx.ready ? t(`fixes.${fx.id}.name`) : t('fixes.unavailable')}
+                          aria-label={t('fixes.ariaFix', { title: v.title })} onClick={() => applyFix(v)}>
+                          {fx.pending ? t('fixes.pending') : t('fixes.button')}
+                        </button>
+                      )
+                    })()}
                     {stateOf(v) === 'open' && (
                       <button type="button" className="ack" disabled={rowBusy}
                         aria-label={t('alertsPage.ariaAck', { title: v.title })} onClick={() => acknowledge(v)}>

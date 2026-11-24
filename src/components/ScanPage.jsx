@@ -6,7 +6,8 @@ import useRows from '../useRows'
 import './ScanPage.css'
 
 const KINDS = ['scan_now', 'block_ip', 'unblock_ip', 'fix']
-const BLOCK_REASONS = ['invalid_ip', 'gateway', 'self', 'trusted', 'dhcp', 'dns_service', 'unsupported_os', 'rate_limit']
+const FIX_IDS = ['smbv1', 'rdp_nla', 'telnet']
+const BLOCK_REASONS = ['unknown_fix', 'invalid_ip', 'gateway', 'self', 'trusted', 'dhcp', 'dns_service', 'unsupported_os', 'rate_limit']
 const RESULT_CODES = ['scan_done', 'no_devices', 'busy', 'error', 'unsupported', 'expired', 'restarted', 'rejected']
 
 // Analyse à la demande : la page dépose une demande dans sensor_commands ; le capteur installé sur le PC
@@ -47,8 +48,11 @@ export default function ScanPage({ user, sensors = [], vulns = [], sensorsMissin
     const r = parseCommandResult(c.result)
     if (!r) return '—'
     if (r.code === 'raw') return r.message
+    if (r.code === 'fix_done' || r.code === 'fix_already') {
+      return t(`fixes.result.${r.code}`, { name: FIX_IDS.includes(r.id) ? t(`fixes.${r.id}.name`) : String(r.id || '') })
+    }
     if (r.code === 'blocked' || r.code === 'unblocked') return t(`blocks.result.${r.code}`, { ip: r.ip || '' })
-    if (r.code === 'rejected' && r.reason) return t('blocks.result.rejectedWhy', { why: BLOCK_REASONS.includes(r.reason) ? t(`blocks.reason.${r.reason}`) : r.reason })
+    if (r.code === 'rejected' && r.reason) return t('blocks.result.rejectedWhy', { why: BLOCK_REASONS.includes(r.reason) ? (r.reason === 'unknown_fix' ? t('fixes.reason.unknown_fix') : t(`blocks.reason.${r.reason}`)) : r.reason })
     if (!RESULT_CODES.includes(r.code)) return r.code
     return t(`scan.result.${r.code}`, { ...r, message: r.message || '' })
   }

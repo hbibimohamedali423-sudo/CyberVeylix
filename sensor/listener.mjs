@@ -28,6 +28,7 @@ import { connectSupabase, createPusher } from './lib/push.mjs'
 import { startWebServer } from './lib/web-server.mjs'
 import { createCommandRunner } from './lib/commands.mjs'
 import { createActions } from './lib/actions.mjs'
+import { createLocalFixes } from './lib/fixes.mjs'
 import { createBlocker } from './lib/blocker.mjs'
 import dns from 'node:dns/promises'
 
@@ -261,17 +262,53 @@ cap.on('packet', (nbytes) => {
 // Cibles : les appareils appris par le capteur (jamais le PC du capteur lui-même), réseaux privés seulement.
 const sensorIp = interfaceIpv4(device)
 let vulnRunning = false
+
+// Audit LOCAL de ce PC (lecture seule : SMBv1, Bureau à distance sans NLA, Telnet) : le capteur ne s'analyse pas
+// par le réseau (ses leurres fausseraient le résultat), il lit directement son état. Voir lib/fixes.mjs.
+const localFixes = createLocalFixes({ hostname: hostname(), ip: sensorIp, dataDir: DATA })
+let localRunning = false
+async function localAuditAndSync() {
+  if (localRunning || !localFixes.supported) return { ran: false, findings: [] }
+  localRunning = true
+  try {
+    const r = await localFixes.audit()
+    if (r.ran) {
+      if (r.findings.length) console.log(`Audit de ce PC : ${r.findings.length} faiblesse(s) (${r.findings.map((f) => f.rule.replace('local-', '')).join(', ')}).`)
+      if (opts.push && (r.findings.length || r.fixed.length)) {
+        enqueue(async () => {
+          const p = await pusher()
+          if (p) await p.syncVulnerabilities({ findings: r.findings, fixed: r.fixed })
+        })
+        heartbeat()
+        await pushQueue
+      }
+    }
+    return r
+  } finally {
+    localRunning = false
+  }
+}
+// Premier audit 1 minute après le démarrage, puis toutes les 6 heures (et après chaque analyse / correction).
+setTimeout(() => { localAuditAndSync().catch((e) => console.log('⚠ Audit local : ' + e.message)) }, 60 * 1000).unref()
+setInterval(() => { localAuditAndSync().catch((e) => console.log('⚠ Audit local : ' + e.message)) }, 6 * 3600 * 1000).unref()
+
 // Renvoie un résultat { code, ... } (affiché dans la page pour les demandes « Analyser maintenant »).
 async function vulnScanOnce() {
   if (vulnRunning) return { code: 'busy' } // une analyse à la fois
   vulnRunning = true
   try {
+    const local = await localAuditAndSync().catch(() => ({ ran: false, findings: [] }))
     const targets = [...new Set(detectors.snapshot().bindings.map((b) => b.ip))]
       .filter((ip) => isPrivateIpv4(ip) && ip !== sensorIp)
-    if (!targets.length) { console.log('Analyse de vulnérabilités : aucun appareil connu pour l\'instant.'); return { code: 'no_devices' } }
+    if (!targets.length) {
+      console.log('Analyse de vulnérabilités : aucun appareil connu pour l\'instant.')
+      if (!local.ran) return { code: 'no_devices' }
+      const n0 = countBySeverity(local.findings)
+      return { code: 'scan_done', hosts: 0, findings: local.findings.length, ...n0 } // seul ce PC a été audité
+    }
     console.log(`Analyse de vulnérabilités de ${targets.length} appareil(s)…`)
     const r = await runVulnScan({ targets, dataDir: DATA, client: config.client || '' })
-    const n = countBySeverity(r.report.findings)
+    const n = countBySeverity([...r.report.findings, ...local.findings])
     console.log(`✔ Analyse terminée : ${r.report.findings.length} faiblesse(s) (critiques ${n.c}, hautes ${n.h}, moyennes ${n.m}, basses ${n.l}). Rapport : ${r.htmlFile}`)
     if (r.events.length) report(r.events)
     lastScanAt = new Date().toISOString()
@@ -285,7 +322,7 @@ async function vulnScanOnce() {
       heartbeat()
       await pushQueue // résultats écrits dans la base avant d'annoncer « terminé »
     }
-    return { code: 'scan_done', hosts: targets.length, findings: r.report.findings.length, ...n }
+    return { code: 'scan_done', hosts: targets.length, findings: r.report.findings.length + local.findings.length, ...n }
   } catch (e) {
     console.log('⚠ Analyse de vulnérabilités impossible : ' + e.message)
     return { code: 'error', failed: true, message: String(e.message).slice(0, 300) }
@@ -359,6 +396,12 @@ if (opts.push) {
         scan_now: () => vulnScanOnce(),
         block_ip: (params) => autoActions.handlers.block_ip(params),
         unblock_ip: (params) => autoActions.handlers.unblock_ip(params),
+        // Corrections de la liste blanche (lib/fixes.mjs), sur CE PC seulement ; re-audit aussitôt après.
+        fix: async (params) => {
+          const r = await localFixes.applyFix(params && params.id)
+          if (r.code === 'fix_done' || r.code === 'fix_already') await localAuditAndSync().catch(() => {})
+          return r
+        },
       },
     })
     autoActions = createActions({
@@ -369,7 +412,7 @@ if (opts.push) {
       serviceIps,
     })
     runner.start()
-    console.log('Commandes de la page web : à l\'écoute (analyse, blocage et déblocage ; toutes les 5 s).')
+    console.log('Commandes de la page web : à l\'écoute (analyse, blocage, déblocage et corrections ; toutes les 5 s).')
   })
 }
 

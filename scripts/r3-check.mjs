@@ -1,6 +1,6 @@
 // Vérifications de la logique R3 (aucune dépendance) : node scripts/r3-check.mjs
 import assert from 'node:assert/strict'
-import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand, pickSensorFor, blockState } from '../src/lib/findings.js'
+import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand, pickSensorFor, blockState, localFixOf, fixSensorFor, hostKey } from '../src/lib/findings.js'
 
 let passed = 0
 const failures = []
@@ -88,6 +88,18 @@ check('état du blocage : actif, en attente, aucun', () => {
   assert.equal(blockState('10.0.0.7', blocked, cmds), 'pending')
   assert.equal(blockState('10.0.0.8', blocked, cmds), 'none') // demande terminée
   assert.equal(blockState(null, blocked, cmds), 'none')
+})
+
+check('correction locale : clé « local:<pc>:<id> » → capteur du même PC', () => {
+  assert.deepEqual(localFixOf({ finding_key: 'local:pc-accueil:smbv1' }), { host: 'pc-accueil', id: 'smbv1' })
+  assert.equal(localFixOf({ finding_key: 'local:pc:rm_rf' }), null) // id hors liste blanche
+  assert.equal(localFixOf({ finding_key: '192.168.1.10:445:smb1-enabled' }), null) // faiblesse réseau : pas de bouton
+  assert.equal(localFixOf({ finding_key: null }), null)
+  assert.equal(localFixOf(undefined), null)
+  assert.equal(hostKey('PC-Accueil'), 'pc-accueil')
+  const sensors = [{ id: 'a', name: 'SRV-1' }, { id: 'b', name: 'PC-Accueil' }]
+  assert.equal(fixSensorFor({ finding_key: 'local:pc-accueil:telnet' }, sensors).id, 'b')
+  assert.equal(fixSensorFor({ finding_key: 'local:autre:telnet' }, sensors), null)
 })
 
 console.log('')

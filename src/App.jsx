@@ -94,7 +94,8 @@ function Dashboard({ user }) {
           <TopologyPage devices={dev.rows} services={srv.rows} networks={net.rows} networksLoaded={net.loaded} loaded={dev.loaded} />
         ) : page === 'vulns' ? (
           <main className="main wide">
-            <VulnsPage vulns={vul.rows} devices={dev.rows} onAdd={vul.add} onUpdate={vul.update} onRemove={vul.remove} />
+            <VulnsPage vulns={vul.rows} devices={dev.rows} onAdd={vul.add} onUpdate={vul.update} onRemove={vul.remove}
+              sensors={sen.rows} commands={r4Missing ? [] : cmd.rows} onCommand={r4Missing ? undefined : sendCommand} />
           </main>
         ) : page === 'threats' ? (
           <main className="main wide">

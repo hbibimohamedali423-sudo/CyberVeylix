@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "test": "node scripts/csv-check.mjs && node scripts/r3-check.mjs && node scripts/i18n-check.mjs && node scripts/agent-check.mjs && node sensor/test/run.mjs",
     "preview": "vite preview",
-    "agent:check": "node --env-file=agent/.env agent/scan.mjs --check"
+    "agent:check": "node --env-file=agent/.env agent/scan.mjs --check",
+    "test:integration": "node sensor/test/integration/run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
