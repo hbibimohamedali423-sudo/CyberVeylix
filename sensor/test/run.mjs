@@ -10,6 +10,7 @@ import net from 'node:net'
 import { vulnUnitChecks } from './vuln-unit.mjs'
 import { vulnIntegrationChecks } from './vuln-integration.mjs'
 import { vulnReportChecks } from './vuln-report.mjs'
+import { pushChecks } from './push-test.mjs'
 import { parseArp, ARP_REQUEST, ARP_REPLY } from '../lib/parse-arp.mjs'
 import { parseDhcpServerReply, DHCP_OFFER } from '../lib/parse-dhcp.mjs'
 import { createDetectors } from '../lib/detectors.mjs'
@@ -482,6 +483,7 @@ checkAsync('Leurres réels + interprétation : balayage et tentative de connexio
 // --- Vulnérabilités : sondes réelles contre des services factices -------------
 vulnIntegrationChecks(checkAsync, check)
 vulnReportChecks(check, checkAsync)
+pushChecks(check, checkAsync)
 
 // --- Scripts Windows (installateur / désinstallateur) ------------------------
 const sensorFile = (name) => fileURLToPath(new URL(`../${name}`, import.meta.url))

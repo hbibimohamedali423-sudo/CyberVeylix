@@ -382,9 +382,16 @@ let alertErrors = 0
 
 // Alertes enregistrées immédiatement, appareil par appareil : si le scan s'interrompt plus loin
 // (réseau, base), les alertes déjà dues ne sont plus perdues.
+let alertSourceOk = true
 async function raise(list, deviceId) {
   if (baseline || NO_ALERTS || !list.length) return
-  const r = await sb.from('alerts').insert(list.map((a) => ({ ...a, device_id: deviceId, network_id: network.id })))
+  const rows = list.map((a) => ({ ...a, device_id: deviceId, network_id: network.id }))
+  let r = await sb.from('alerts').insert(alertSourceOk ? rows.map((a) => ({ ...a, source: 'agent' })) : rows)
+  // Colonne « source » absente (schema_r1_results.sql pas encore exécuté) : on enregistre sans.
+  if (r.error && alertSourceOk && /source/.test(r.error.message || '')) {
+    alertSourceOk = false
+    r = await sb.from('alerts').insert(rows)
+  }
   if (r.error) {
     alertErrors++
     console.log('⚠ Alertes non enregistrées : ' + r.error.message + ' (avez-vous exécuté supabase/schema_n2_prep.sql ?)')

@@ -11,6 +11,7 @@
 import { createRequire } from 'node:module'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { hostname } from 'node:os'
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, rmSync, statSync, renameSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -23,6 +24,7 @@ import { startHoneypots, DEFAULT_PORTS } from './lib/honeypot-servers.mjs'
 import { isPrivateIpv4 } from './lib/vuln/scan.mjs'
 import { runVulnScan } from './lib/vuln/run.mjs'
 import { countBySeverity } from './lib/vuln/report.mjs'
+import { connectSupabase, createPusher } from './lib/push.mjs'
 
 const require = createRequire(import.meta.url)
 const run = promisify(execFile)
@@ -142,54 +144,28 @@ function appendEvent(line) {
 }
 
 // --- Envoi optionnel vers le tableau de bord (--push) -------------------------------
+// Alertes (origine capteur / leurre / analyse), vulnérabilités détaillées et état du capteur.
+// Voir lib/push.mjs ; sans supabase/schema_r1_results.sql l'envoi se limite aux colonnes d'origine.
 let pushQueue = Promise.resolve()
-let sb = null
-async function ensureSupabase() {
-  if (sb) return sb
-  const env = process.env
-  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY || !env.CV_EMAIL || !env.CV_PASSWORD) {
-    console.log('⚠ --push : variables manquantes (lancez avec --env-file=agent/.env).')
-    return null
-  }
-  const { createClient } = await import('@supabase/supabase-js')
-  const client = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, { auth: { persistSession: false } })
-  const { error } = await client.auth.signInWithPassword({ email: env.CV_EMAIL, password: env.CV_PASSWORD })
-  if (error) { console.log('⚠ --push : connexion refusée : ' + error.message); return null }
-  sb = client
-  return sb
+let pusherPromise = null
+const enqueue = (task) => { pushQueue = pushQueue.then(task).catch((e) => console.log('⚠ Envoi : ' + e.message)) }
+function pusher() {
+  pusherPromise ||= connectSupabase(process.env).then((client) => client && createPusher(client, {
+    gatewayMac: () => opts.gatewayMac || saved?.gatewayMac || (gatewayIp && detectors.macOf(gatewayIp)),
+  }))
+  return pusherPromise
 }
-
-async function pushAlert(e) {
-  const client = await ensureSupabase()
-  if (!client) return
-  const { error } = await client.from('alerts').insert({ title: e.title, detail: e.detail, severity: e.severity })
-  if (error) console.log('⚠ Alerte non envoyée : ' + error.message)
-}
-
-// Faiblesses vers la table « vulnerabilities » existante (colonnes title, severity, device_id).
-// Sans doublon : une faiblesse déjà présente pour le même appareil n'est pas réinsérée.
-async function pushVulnerabilities(findings) {
-  if (!findings.length) return
-  const client = await ensureSupabase()
-  if (!client) return
-  const devices = await client.from('devices').select('id,ip')
-  const existing = await client.from('vulnerabilities').select('title,device_id')
-  if (devices.error || existing.error) {
-    console.log('⚠ Vulnérabilités non envoyées : ' + (devices.error || existing.error).message)
-    return
-  }
-  const idByIp = new Map(devices.data.filter((d) => d.ip).map((d) => [d.ip, d.id]))
-  const seen = new Set(existing.data.map((v) => `${v.title}|${v.device_id ?? ''}`))
-  const rows = []
-  for (const f of findings) {
-    const row = { title: `${f.title} — ${f.ip}:${f.port}`.slice(0, 300), severity: f.severity, device_id: idByIp.get(f.ip) ?? null }
-    const key = `${row.title}|${row.device_id ?? ''}`
-    if (!seen.has(key)) { seen.add(key); rows.push(row) }
-  }
-  if (!rows.length) return
-  const { error } = await client.from('vulnerabilities').insert(rows)
-  if (error) console.log('⚠ Vulnérabilités non envoyées : ' + error.message)
-  else console.log(`  ${rows.length} vulnérabilité(s) envoyée(s) au tableau de bord.`)
+const SENSOR_VERSION = (() => {
+  try { return JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).version } catch { return null }
+})()
+const startedAt = new Date().toISOString()
+let lastScanAt = null
+function heartbeat() {
+  if (!opts.push) return
+  enqueue(async () => {
+    const p = await pusher()
+    if (p) await p.heartbeat({ name: hostname(), version: SENSOR_VERSION, ip: sensorIp, honeypot: Boolean(honeypots), vulnScan: opts.vulnScan, startedAt, lastScanAt })
+  })
 }
 
 function report(events) {
@@ -198,8 +174,8 @@ function report(events) {
     const tag = { c: 'CRITIQUE', h: 'HAUTE', m: 'MOYENNE', l: 'BASSE' }[e.severity] || e.severity
     console.log(`[${at}] ${tag.padEnd(8)} ${e.title} — ${e.detail}`)
     appendEvent(JSON.stringify({ at, ...e }))
-    if (opts.push) pushQueue = pushQueue.then(() => pushAlert(e)).catch(() => {})
   }
+  if (opts.push && events.length) enqueue(async () => { const p = await pusher(); if (p) await p.pushAlerts(events) })
 }
 
 // --- Capture -------------------------------------------------------------------------
@@ -285,7 +261,16 @@ async function vulnScanOnce() {
     const n = countBySeverity(r.report.findings)
     console.log(`✔ Analyse terminée : ${r.report.findings.length} faiblesse(s) (critiques ${n.c}, hautes ${n.h}, moyennes ${n.m}, basses ${n.l}). Rapport : ${r.htmlFile}`)
     if (r.events.length) report(r.events)
-    if (opts.push) pushQueue = pushQueue.then(() => pushVulnerabilities(r.firstScan ? r.report.findings : r.added)).catch(() => {})
+    lastScanAt = new Date().toISOString()
+    if (opts.push) {
+      enqueue(async () => {
+        const p = await pusher()
+        if (!p) return
+        await p.syncServices(r.report.hosts)
+        await p.syncVulnerabilities({ findings: r.report.findings, fixed: r.fixed })
+      })
+      heartbeat()
+    }
   } catch (e) {
     console.log('⚠ Analyse de vulnérabilités impossible : ' + e.message)
   } finally {
@@ -321,6 +306,10 @@ if (learnMinutes > 0) {
 // après redémarrage ils ne seront plus « nouveaux » (l'alerte a déjà été émise et journalisée).
 // La MAC de la passerelle, elle, reste verrouillée sur la valeur apprise.
 setInterval(saveBaseline, 60 * 1000).unref()
+
+// Pouls toutes les 5 minutes : l'application affiche « en service » ou « arrêté depuis… ».
+heartbeat()
+setInterval(heartbeat, 5 * 60 * 1000).unref()
 
 function shutdown() {
   try { saveBaseline() } catch { /* ignore */ }

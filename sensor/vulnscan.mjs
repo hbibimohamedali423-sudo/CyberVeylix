@@ -3,6 +3,7 @@
 //   node sensor/vulnscan.mjs --yes --targets=192.168.1.0/24 [--client="Société X"] [--out=dossier]
 //   node sensor/vulnscan.mjs --config=C:\ProgramData\CyberVeylix\Sensor\config.json
 //       (appareils connus du capteur, client et autorisation repris de l'installation)
+//   Ajoutez --push (et lancez avec --env-file=agent/.env) pour envoyer les résultats au tableau de bord.
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +11,7 @@ import { parseConfigText } from './lib/options.mjs'
 import { expandTargets, isPrivateIpv4 } from './lib/vuln/scan.mjs'
 import { runVulnScan } from './lib/vuln/run.mjs'
 import { countBySeverity } from './lib/vuln/report.mjs'
+import { connectSupabase, createPusher } from './lib/push.mjs'
 
 const argv = process.argv.slice(2)
 const value = (name) => argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3)
@@ -32,6 +34,11 @@ const dataDir = value('out') || config.dataDir || join(HERE, 'data')
 const client = value('client') || config.client || ''
 
 let targets
+let baseline = null
+const baselineFile = join(dataDir, 'baseline.json')
+if (existsSync(baselineFile)) {
+  try { baseline = JSON.parse(readFileSync(baselineFile, 'utf8')) } catch { baseline = null }
+}
 const spec = value('targets')
 if (spec) {
   const r = expandTargets(spec)
@@ -39,10 +46,8 @@ if (spec) {
   targets = r.targets
 } else {
   // Appareils connus du capteur (référence apprise), sauf le PC du capteur lui-même.
-  const baselineFile = join(dataDir, 'baseline.json')
   if (!existsSync(baselineFile)) die('Aucune cible : précisez --targets=… ou lancez d\'abord le capteur pour apprendre le réseau.')
-  let baseline
-  try { baseline = JSON.parse(readFileSync(baselineFile, 'utf8')) } catch { die('baseline.json illisible.') }
+  if (!baseline) die('baseline.json illisible.')
   targets = [...new Set((baseline.bindings || []).map((b) => b.ip))]
     .filter((ip) => isPrivateIpv4(ip) && ip !== config.interface)
   if (!targets.length) die('Aucun appareil connu à analyser.')
@@ -67,3 +72,14 @@ for (const f of report.findings) {
 }
 if (!result.firstScan) console.log(`Depuis la dernière analyse : ${result.added.length} nouvelle(s), ${result.fixed.length} corrigée(s).`)
 console.log(`Rapport (à ouvrir dans un navigateur, imprimable en PDF) : ${result.htmlFile}`)
+
+if (argv.includes('--push') || config.push === true) {
+  const sb = await connectSupabase(process.env)
+  if (sb) {
+    const pusher = createPusher(sb, { gatewayMac: config.gatewayMac || baseline?.gatewayMac || null })
+    await pusher.syncServices(report.hosts)
+    await pusher.syncVulnerabilities({ findings: report.findings, fixed: result.fixed })
+    await pusher.pushAlerts(result.events)
+    await sb.auth.signOut()
+  }
+}

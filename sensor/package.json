@@ -1,7 +1,7 @@
 {
   "name": "cyberveylix-sensor",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "Capteur passif CyberVeylix : écoute ARP/DHCP sur le réseau local (Npcap / libpcap).",
   "engines": {
