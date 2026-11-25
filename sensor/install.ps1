@@ -162,6 +162,48 @@ function Set-SnmpConfig([string]$Path) {
   Write-Ok "Lecture des switchs configurée : premier résultat 2 minutes après le démarrage, puis toutes les 15 minutes"
 }
 
+# Alertes instantanées Telegram : jeton du bot vérifié, conversation trouvée automatiquement (/start), message de test.
+# Jeton enregistré dans notify.json du dossier de données (accès SYSTEM / administrateurs) ; jamais affiché.
+function Set-TelegramConfig([string]$Path, [string]$Client) {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+  Write-Note '1. Dans Telegram, ouvrez la conversation avec @BotFather, envoyez /newbot et répondez à ses deux questions.'
+  Write-Note '2. BotFather vous donne un jeton (de la forme 123456789:AA...). Collez-le ci-dessous.'
+  do { $token = (Read-Secret 'Jeton du bot Telegram').Trim() } until ($token -match '^\d{5,15}:[A-Za-z0-9_-]{30,64}$')
+  $api = "https://api.telegram.org/bot$token"
+  try { $me = Invoke-RestMethod -Uri "$api/getMe" -TimeoutSec 20 } catch { throw 'Jeton refusé par Telegram : vérifiez-le auprès de @BotFather.' }
+  $botName = [string]$me.result.username
+  Write-Ok "Bot trouvé : @$botName"
+  $chat = $null
+  for ($i = 1; $i -le 3 -and -not $chat; $i++) {
+    Read-Host "    3. Dans Telegram, ouvrez @$botName, appuyez sur Démarrer (ou envoyez /start), puis appuyez sur Entrée ici" | Out-Null
+    try {
+      $updates = Invoke-RestMethod -Uri "$api/getUpdates" -TimeoutSec 20
+      $last = @($updates.result | Where-Object { $_.message } | Select-Object -Last 1)
+      if ($last.Count -gt 0) { $chat = $last[0].message.chat }
+    } catch { $chat = $null }
+    if (-not $chat) { Write-Attention 'Le bot n''a encore reçu aucun message.' }
+  }
+  if (-not $chat) { throw 'Le bot n''a reçu aucun message (/start).' }
+  $text = "CyberVeylix : les alertes importantes de $Client arriveront ici."
+  $body = @{ chat_id = [string]$chat.id; text = $text } | ConvertTo-Json
+  try {
+    Invoke-RestMethod -Method Post -Uri "$api/sendMessage" -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 20 | Out-Null
+  } catch { throw 'Envoi du message de test impossible.' }
+  $cfg = [ordered]@{ telegram = [ordered]@{ token = $token; chatId = [string]$chat.id }; minSeverity = 'h' }
+  Write-Utf8NoBom $Path (($cfg | ConvertTo-Json -Depth 4) + "`n")
+  $token = $null
+  Write-Ok 'Alertes Telegram configurées : un message de test vient d''être envoyé sur votre téléphone'
+}
+
+function Invoke-TelegramStep([string]$Path, [string]$Client) {
+  Write-Step 'Alertes sur téléphone (Telegram, facultatif)'
+  Write-Note 'Les alertes critiques et hautes arrivent aussitôt sur votre téléphone, même quand le tableau de bord est fermé.'
+  if (Read-YesNo 'Recevoir les alertes importantes sur Telegram ?' $false) {
+    try { Set-TelegramConfig $Path $Client }
+    catch { Write-Attention ("Alertes Telegram non configurées : " + $_.Exception.Message + ' (possible plus tard avec -Reconfigure)') }
+  }
+}
+
 function Test-Npcap {
   $service = Get-Service -Name 'npcap' -ErrorAction SilentlyContinue
   return ($null -ne $service) -and (Test-Path (Join-Path $NpcapDir 'wpcap.dll'))
@@ -511,6 +553,8 @@ try {
     } else {
       Write-Ok 'Lecture des switchs non configurée (possible plus tard avec -Reconfigure)'
     }
+    $notifyFile = Join-Path $DataDir 'notify.json'
+    if (-not $Unattended) { Invoke-TelegramStep $notifyFile $ClientName }
 
     # Une référence apprise sur un autre réseau ou une autre passerelle n'est plus valable.
     if ((Test-Path $baselineFile) -and $existing -and ($existing.gateway -ne $selected.Gateway)) {
@@ -575,6 +619,8 @@ try {
       Write-Note 'Nouveau : avec un accès SNMP en lecture seule, la carte indique le port et le point Wi-Fi de chaque appareil.'
       if (Read-YesNo 'Configurer la lecture des switchs maintenant ?' $false) { Set-SnmpConfig $snmpFile }
     }
+    $notifyFile = Join-Path $DataDir 'notify.json'
+    if (-not $Unattended -and -not (Test-Path $notifyFile)) { Invoke-TelegramStep $notifyFile $ClientName }
     if (($null -eq $existing.honeypot) -or ($null -eq $existing.vulnScan)) {
       Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer les leurres et l''analyse des vulnérabilités.'
     }

@@ -108,6 +108,17 @@ Limites : un switch non géré ne peut pas être lu ; les points d'accès pilot�
 le trafic montrent leurs clients derrière le contrôleur ; l'association exacte d'un client Wi-Fi à un point
 d'accès sans LLDP n'est pas déterminable par les MIB standard.
 
+## Alertes instantanées sur téléphone (Telegram)
+Facultatif. Avec `notify.json` dans le dossier de données (créé par l'installateur : jeton vérifié auprès de
+Telegram, conversation trouvée après « /start », message de test), les alertes **critiques et hautes** sont envoyées
+aussitôt : usurpation de la passerelle, DHCP pirate, balayage ou tentative de connexion sur les leurres, nouvelle
+faiblesse critique… Regroupées (une fenêtre de 10 s = un message), 30 messages par heure au plus. Un message
+« capteur en service » confirme la configuration à chaque démarrage. Le jeton du bot ne quitte jamais ce PC
+(jamais en base, ni dans la page, ni dans le journal, même en cas d'erreur).
+```json
+{ "telegram": { "token": "123456789:AA…", "chatId": "987654321" }, "minSeverity": "h" }
+```
+
 ## Interface (tableau de bord)
 L'installateur place le tableau de bord dans le dossier `ui` et le capteur le sert lui-même : aucun site
 externe à installer. Sur le PC : raccourci **CyberVeylix** sur le Bureau, ou `http://localhost:8710`.

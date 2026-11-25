@@ -34,6 +34,7 @@ import { createOui } from './lib/oui.mjs'
 import { parseSnmpConfig } from './lib/snmp-config.mjs'
 import { createSnmpClient } from './lib/snmp-client.mjs'
 import { createTopologySync } from './lib/topo-sync.mjs'
+import { parseNotifyConfig, createNotifier } from './lib/notify.mjs'
 import { createBlocker } from './lib/blocker.mjs'
 import dns from 'node:dns/promises'
 
@@ -192,6 +193,7 @@ function report(events) {
     appendEvent(JSON.stringify({ at, ...e }))
   }
   if (opts.push && events.length) enqueue(async () => { const p = await pusher(); if (p) await p.pushAlerts(events) })
+  if (notifier && events.length) notifier.notify(events)
   // Blocage automatique (réglage « auto_block » du capteur, désactivé par défaut) : géré par lib/actions.mjs.
   if (opts.push && events.length) {
     for (const e of events) {
@@ -200,6 +202,28 @@ function report(events) {
   }
 }
 let autoActions = null // créé quand le lecteur de commandes démarre (nécessite la connexion au tableau de bord)
+
+// Alertes instantanées Telegram si notify.json existe (relu chaque minute ; jeton jamais affiché).
+const NOTIFY_FILE = join(DATA, 'notify.json')
+let notifier = null
+let notifyText = null
+function loadNotifier() {
+  try {
+    if (!existsSync(NOTIFY_FILE)) { notifier = null; notifyText = null; return }
+    const text = readFileSync(NOTIFY_FILE, 'utf8')
+    if (text === notifyText) return
+    notifyText = text
+    const parsed = parseNotifyConfig(text)
+    if (parsed.error) { notifier = null; console.log('⚠ Alertes Telegram désactivées : ' + parsed.error); return }
+    notifier = createNotifier({ config: parsed.config, client: config.client || '', host: hostname() })
+    console.log('Alertes Telegram : actives (gravité ' + parsed.config.minSeverity + ' et plus).')
+    notifier.sendText(`✅ CyberVeylix${config.client ? ` — ${config.client}` : ''} : capteur en service sur ${hostname()}. Les alertes importantes arriveront ici.`)
+  } catch (e) {
+    console.log('⚠ Alertes Telegram : ' + e.message)
+  }
+}
+loadNotifier()
+setInterval(loadNotifier, 60 * 1000).unref()
 
 // --- Capture -------------------------------------------------------------------------
 const device = pickDevice()
