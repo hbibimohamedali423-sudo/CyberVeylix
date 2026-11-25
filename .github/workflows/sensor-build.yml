@@ -3,6 +3,8 @@
 #
 # - Lancement manuel (onglet Actions) ou pull request touchant sensor/ : paquet en « artefact ».
 # - Tag « sensor-vX.Y.Z » (même version que sensor/package.json) : publication d'une release GitHub.
+#   Deux façons, au choix : pousser le tag, OU créer la release depuis la page GitHub (Releases > Draft a new
+#   release, tag sensor-vX.Y.Z). Dans les deux cas le paquet est construit puis joint à la release (sans doublon).
 name: Capteur Windows
 
 on:
@@ -10,10 +12,21 @@ on:
   pull_request:
     paths:
       - 'sensor/**'
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
       - '.github/workflows/sensor-build.yml'
   push:
     tags:
       - 'sensor-v*'
+  release:
+    types: [published]
+
+# Une release créée depuis la page GitHub crée aussi le tag : les deux exécutions éventuelles passent l'une après l'autre.
+concurrency:
+  group: capteur-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -72,6 +85,15 @@ jobs:
       - name: Tests du capteur
         run: node sensor/test/run.mjs
 
+      # Interface (tableau de bord) servie par le capteur lui-même : build React statique, dossier « ui » du paquet.
+      # Aucune clé dans le build : l'URL Supabase et la clé publique viennent de agent.env au lancement (/config.js).
+      - name: Interface (build)
+        shell: pwsh
+        run: |
+          npm ci
+          npm run build
+          if (-not (Test-Path dist/index.html)) { throw 'Build de l''interface absent (dist/index.html).' }
+
       - name: Assemblage du paquet
         shell: pwsh
         run: |
@@ -89,6 +111,8 @@ jobs:
                           'install.cmd', 'uninstall.cmd', 'vulnscan.cmd', 'vulnscan.mjs', 'lib', 'node_modules')) {
             Copy-Item -Path "sensor/$i" -Destination $out -Recurse
           }
+
+          Copy-Item -Path 'dist' -Destination (Join-Path $out 'ui') -Recurse
 
           # Même node.exe que celui qui a compilé cap.node : compatibilité binaire garantie.
           $node = (Get-Command node).Source
@@ -137,4 +161,15 @@ jobs:
 
           Seul prérequis sur le PC : Npcap (https://npcap.com), proposé par l'installateur s'il manque.
           "@
-          gh release create $env:GITHUB_REF_NAME $env:ZIP "$env:ZIP.sha256" --title "Capteur CyberVeylix $env:GITHUB_REF_NAME" --notes $notes
+          $tag = $env:GITHUB_REF_NAME
+          gh release view $tag --json tagName *> $null
+          if ($LASTEXITCODE -eq 0) {
+            # Release déjà créée (page GitHub) : on y joint le paquet, en remplaçant une version précédente du fichier.
+            gh release upload $tag $env:ZIP "$env:ZIP.sha256" --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Envoi du paquet vers la release impossible.' }
+            $body = (gh release view $tag --json body --jq .body | Out-String).Trim()
+            if (-not $body) { gh release edit $tag --notes $notes }
+          } else {
+            gh release create $tag $env:ZIP "$env:ZIP.sha256" --title "Capteur CyberVeylix $tag" --notes $notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Publication de la release impossible.' }

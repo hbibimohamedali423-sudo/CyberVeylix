@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 
 // Lit/écrit une table Supabase pour l’utilisateur connecté (RLS : user_id = auth.uid()).
-export default function useRows(table, user) {
+export default function useRows(table, user, intervalMs = 15000) {
   const [rows, setRows] = useState([])
   const [error, setError] = useState('')
   const [loaded, setLoaded] = useState(false)
@@ -19,9 +19,9 @@ export default function useRows(table, user) {
     let active = true
     const isActive = () => active
     const first = setTimeout(() => { load(isActive) }, 0)
-    const t = setInterval(() => { load(isActive) }, 15000)
+    const t = setInterval(() => { load(isActive) }, intervalMs)
     return () => { active = false; clearTimeout(first); clearInterval(t) }
-  }, [user, load])
+  }, [user, load, intervalMs])
 
   const add = async (row) => {
     const { error: e } = await supabase.from(table).insert(row)

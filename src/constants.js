@@ -1,5 +1,6 @@
 // Codes de navigation : les libellés sont traduits à l’affichage (i18n).
-export const NAV = ['home', 'devices', 'topology', 'scan', 'vulns', 'threats', 'soc', 'reports', 'team', 'install', 'settings']
+// « team » (Équipe) masqué tant que la fonction n'existe pas.
+export const NAV = ['home', 'devices', 'topology', 'scan', 'vulns', 'threats', 'soc', 'reports', 'install', 'settings']
 export const KPIS = [
   { key: 'devices', cls: '' },
   { key: 'threats', cls: 'r' },
@@ -7,7 +8,7 @@ export const KPIS = [
   { key: 'services', cls: '' },
 ]
 // Couleurs pilotées par le thème (valeurs sombres et claires définies dans index.css).
-export const TYPES = { 'Serveur': 'var(--type-server)', 'Poste': 'var(--type-workstation)', 'Caméra': 'var(--type-camera)', 'Équipement réseau': 'var(--type-network)', 'Accès Internet': 'var(--type-internet)' }
+export const TYPES = { 'Serveur': 'var(--type-server)', 'Poste': 'var(--type-workstation)', 'Caméra': 'var(--type-camera)', 'Équipement réseau': 'var(--type-network)', 'Accès Internet': 'var(--type-internet)', 'Téléphone': 'var(--type-phone)', 'Imprimante': 'var(--type-printer)', 'Objet connecté': 'var(--type-iot)' }
 // Ports jugés sensibles par l’agent de découverte (même liste que agent/scan.mjs, SENSITIVE).
 export const SENSITIVE_PORTS = [21, 23, 3389, 5900, 1433, 3306, 5432]
 // Valeur de filtre réservée aux lignes dont network_id est null.
@@ -42,3 +43,8 @@ export const CATS = [
   { k: 'c2', label: 'C2 / Command & Control', color: 'var(--cat-c2)' },
   { k: 'autre', label: 'Autres', color: 'var(--cat-other)' },
 ]
+// R3 — origines enregistrées (colonne source, valeur par défaut « manual » côté base).
+export const VULN_SOURCES = ['manual', 'scan']
+export const ALERT_SOURCES = ['sensor', 'honeypot', 'vuln_scan', 'agent', 'manual']
+// Niveaux de confiance écrits par l'analyse (contrainte vulnerabilities_confidence_check).
+export const CONFIDENCE = ['certaine', 'probable', 'à vérifier']

@@ -11,6 +11,16 @@ import { vulnUnitChecks } from './vuln-unit.mjs'
 import { vulnIntegrationChecks } from './vuln-integration.mjs'
 import { vulnReportChecks } from './vuln-report.mjs'
 import { pushChecks } from './push-test.mjs'
+import { webChecks } from './web-test.mjs'
+import { commandsChecks } from './commands-test.mjs'
+import { actionsChecks } from './actions-test.mjs'
+import { fixesChecks } from './fixes-test.mjs'
+import { inventoryChecks } from './inventory-test.mjs'
+import { snmpChecks } from './snmp-test.mjs'
+import { snmpLiveChecks } from './snmp-live-test.mjs'
+import { topoSyncChecks } from './topo-sync-test.mjs'
+import { notifyChecks } from './notify-test.mjs'
+import { lldpChecks } from './lldp-test.mjs'
 import { parseArp, ARP_REQUEST, ARP_REPLY } from '../lib/parse-arp.mjs'
 import { parseDhcpServerReply, DHCP_OFFER } from '../lib/parse-dhcp.mjs'
 import { createDetectors } from '../lib/detectors.mjs'
@@ -484,6 +494,16 @@ checkAsync('Leurres réels + interprétation : balayage et tentative de connexio
 vulnIntegrationChecks(checkAsync, check)
 vulnReportChecks(check, checkAsync)
 pushChecks(check, checkAsync)
+webChecks(check, checkAsync)
+commandsChecks(check, checkAsync)
+actionsChecks(check, checkAsync)
+fixesChecks(check, checkAsync)
+inventoryChecks(check, checkAsync)
+snmpChecks(check, checkAsync)
+snmpLiveChecks(check, checkAsync)
+topoSyncChecks(check, checkAsync)
+notifyChecks(check, checkAsync)
+lldpChecks(check)
 
 // --- Scripts Windows (installateur / désinstallateur) ------------------------
 const sensorFile = (name) => fileURLToPath(new URL(`../${name}`, import.meta.url))
@@ -509,7 +529,7 @@ for (const name of ['install.cmd', 'uninstall.cmd', 'vulnscan.cmd', 'run-sensor.
 check('install.ps1 : tous les fichiers obligatoires qu\'il copie existent', () => {
   const src = readFileSync(sensorFile('install.ps1'), 'utf8')
   const list = /\$items = @\(([\s\S]*?)\)/.exec(src)[1].match(/'([^']+)'/g).map((s) => s.slice(1, -1))
-  const optional = new Set(['node_modules', 'node.exe', 'node-LICENSE.txt']) // fournis par le paquet construit
+  const optional = new Set(['node_modules', 'node.exe', 'node-LICENSE.txt', 'ui']) // fournis par le paquet construit
   const missing = list.filter((f) => !optional.has(f) && !existsSync(sensorFile(f)))
   assert.deepEqual(missing, [])
 })

@@ -11,6 +11,8 @@
   - Active les leurres (honeypot) : services factices dont tout contact révèle une intrusion,
     avec une règle de pare-feu limitée au capteur et au réseau local (désactivables : -NoHoneypot).
   - Programme l'analyse non intrusive des vulnérabilités des appareils connus (désactivable : -NoVulnScan).
+  - Installe l'interface (tableau de bord) : le capteur la sert lui-même sur http://<ce PC>:8710, avec une règle
+    de pare-feu limitée au réseau local et un raccourci sur le Bureau (désactivable : -NoUi ; ce PC seulement : -UiLocalOnly).
   - Crée une tâche planifiée qui lance le capteur au démarrage, en compte SYSTEM,
     et le relance automatiquement s'il s'arrête.
   Aucun réglage du réseau du client n'est modifié. Relancer ce script met à jour l'installation.
@@ -36,6 +38,9 @@ param(
   [switch]$Push,
   [switch]$NoHoneypot,
   [switch]$NoVulnScan,
+  [switch]$NoUi,
+  [switch]$UiLocalOnly,
+  [ValidateRange(1024, 65535)][int]$UiPort = 8710,
   [ValidateRange(1, 168)][int]$VulnScanHours = 24,
   [string[]]$HoneypotAllow = @(),
   [string]$EnvFile = '',
@@ -117,6 +122,86 @@ function Format-EnvValue([string]$Value) {
   if ($Value -notmatch '"') { return '"' + $Value + '"' }
   if ($Value -notmatch "'") { return "'" + $Value + "'" }
   throw 'Valeur invalide dans agent.env (guillemets simples et doubles à la fois).'
+}
+
+# Saisie masquée (identifiants SNMP) : la valeur n'apparaît jamais à l'écran.
+function Read-Secret([string]$Prompt) {
+  $secure = Read-Host "    $Prompt" -AsSecureString
+  $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+  finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+}
+
+# Lecture des switchs et points d'accès (SNMP, LECTURE SEULE) : identifiants enregistrés dans snmp.json du dossier
+# de données (accès SYSTEM / administrateurs). Ils ne quittent jamais ce PC.
+function Set-SnmpConfig([string]$Path) {
+  $creds = New-Object System.Collections.ArrayList
+  do {
+    $v = ''
+    while ($v -ne '2' -and $v -ne '3') { $v = (Read-Host '    Version SNMP de vos équipements : 2 (community) ou 3 (utilisateur)').Trim() }
+    if ($v -eq '2') {
+      do { $c = Read-Secret 'Community en lecture seule (celle configurée sur vos switchs)' } until ($c -and $c.Length -le 64 -and $c -notmatch '\s')
+      [void]$creds.Add([ordered]@{ version = '2c'; community = $c })
+    } else {
+      do { $u = (Read-Host '    Utilisateur SNMPv3').Trim() } until ($u -and $u.Length -le 32)
+      do { $ak = Read-Secret 'Clé d''authentification SHA (8 caractères au moins)' } until ($ak.Length -ge 8)
+      do { $pk = Read-Secret 'Clé de chiffrement AES (8 caractères au moins ; vide = sans chiffrement)' } until ($pk.Length -eq 0 -or $pk.Length -ge 8)
+      $entry = [ordered]@{ version = '3'; user = $u; authProtocol = 'sha'; authKey = $ak }
+      if ($pk) { $entry.privProtocol = 'aes'; $entry.privKey = $pk }
+      [void]$creds.Add($entry)
+    }
+  } while ($creds.Count -lt 5 -and (Read-YesNo 'Ajouter un autre identifiant (autre marque ou autre réglage) ?' $false))
+  $raw = (Read-Host '    Adresses IP de vos switchs / points d''accès, séparées par des virgules (vide = découverte automatique)').Trim()
+  $targets = @($raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  foreach ($t in $targets) {
+    if ($t -notmatch '^\d{1,3}(\.\d{1,3}){3}(:\d{1,5}){0,1}$') { throw "Adresse d'équipement invalide : $t" }
+  }
+  $cfg = [ordered]@{ credentials = @($creds); targets = $targets; auto = $true }
+  Write-Utf8NoBom $Path (($cfg | ConvertTo-Json -Depth 4) + "`n")
+  $creds.Clear()
+  Write-Ok "Lecture des switchs configurée : premier résultat 2 minutes après le démarrage, puis toutes les 15 minutes"
+}
+
+# Alertes instantanées Telegram : jeton du bot vérifié, conversation trouvée automatiquement (/start), message de test.
+# Jeton enregistré dans notify.json du dossier de données (accès SYSTEM / administrateurs) ; jamais affiché.
+function Set-TelegramConfig([string]$Path, [string]$Client) {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+  Write-Note '1. Dans Telegram, ouvrez la conversation avec @BotFather, envoyez /newbot et répondez à ses deux questions.'
+  Write-Note '2. BotFather vous donne un jeton (de la forme 123456789:AA...). Collez-le ci-dessous.'
+  do { $token = (Read-Secret 'Jeton du bot Telegram').Trim() } until ($token -match '^\d{5,15}:[A-Za-z0-9_-]{30,64}$')
+  $api = "https://api.telegram.org/bot$token"
+  try { $me = Invoke-RestMethod -Uri "$api/getMe" -TimeoutSec 20 } catch { throw 'Jeton refusé par Telegram : vérifiez-le auprès de @BotFather.' }
+  $botName = [string]$me.result.username
+  Write-Ok "Bot trouvé : @$botName"
+  $chat = $null
+  for ($i = 1; $i -le 3 -and -not $chat; $i++) {
+    Read-Host "    3. Dans Telegram, ouvrez @$botName, appuyez sur Démarrer (ou envoyez /start), puis appuyez sur Entrée ici" | Out-Null
+    try {
+      $updates = Invoke-RestMethod -Uri "$api/getUpdates" -TimeoutSec 20
+      $last = @($updates.result | Where-Object { $_.message } | Select-Object -Last 1)
+      if ($last.Count -gt 0) { $chat = $last[0].message.chat }
+    } catch { $chat = $null }
+    if (-not $chat) { Write-Attention 'Le bot n''a encore reçu aucun message.' }
+  }
+  if (-not $chat) { throw 'Le bot n''a reçu aucun message (/start).' }
+  $text = "CyberVeylix : les alertes importantes de $Client arriveront ici."
+  $body = @{ chat_id = [string]$chat.id; text = $text } | ConvertTo-Json
+  try {
+    Invoke-RestMethod -Method Post -Uri "$api/sendMessage" -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 20 | Out-Null
+  } catch { throw 'Envoi du message de test impossible.' }
+  $cfg = [ordered]@{ telegram = [ordered]@{ token = $token; chatId = [string]$chat.id }; minSeverity = 'h' }
+  Write-Utf8NoBom $Path (($cfg | ConvertTo-Json -Depth 4) + "`n")
+  $token = $null
+  Write-Ok 'Alertes Telegram configurées : un message de test vient d''être envoyé sur votre téléphone'
+}
+
+function Invoke-TelegramStep([string]$Path, [string]$Client) {
+  Write-Step 'Alertes sur téléphone (Telegram, facultatif)'
+  Write-Note 'Les alertes critiques et hautes arrivent aussitôt sur votre téléphone, même quand le tableau de bord est fermé.'
+  if (Read-YesNo 'Recevoir les alertes importantes sur Telegram ?' $false) {
+    try { Set-TelegramConfig $Path $Client }
+    catch { Write-Attention ("Alertes Telegram non configurées : " + $_.Exception.Message + ' (possible plus tard avec -Reconfigure)') }
+  }
 }
 
 function Test-Npcap {
@@ -260,7 +345,7 @@ try {
     if (Test-Path $InstallDir) { Remove-Item -Path $InstallDir -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     $items = @('listener.mjs', 'vulnscan.mjs', 'package.json', 'README.md', 'install.ps1', 'uninstall.ps1', 'install.cmd',
-      'uninstall.cmd', 'vulnscan.cmd', 'lib', 'node_modules', 'node.exe', 'node-LICENSE.txt')
+      'uninstall.cmd', 'vulnscan.cmd', 'lib', 'ui', 'node_modules', 'node.exe', 'node-LICENSE.txt')
     foreach ($item in $items) {
       $path = Join-Path $Source $item
       if (Test-Path $path) { Copy-Item -Path $path -Destination $InstallDir -Recurse -Force }
@@ -355,21 +440,40 @@ try {
     Write-Ok "$ClientName — $AuthorizationRef"
 
     Write-Step 'Tableau de bord'
+    Write-Note 'Recommandé : sans cette liaison, ni l''interface ni les actions depuis la page (analyse, blocage, correction) ne fonctionnent.'
     $pushEnabled = $false
-    $wantPush = $Push -or (Read-YesNo 'Envoyer aussi les alertes au tableau de bord CyberVeylix ?' $false)
+    $wantPush = $Push -or (Read-YesNo 'Relier ce capteur au tableau de bord CyberVeylix ?' (-not $Unattended))
     if ($wantPush) {
       if ($EnvFile) {
         Copy-Item -Path $EnvFile -Destination $agentEnv -Force
       } elseif ($Unattended) {
         throw '-Push exige -EnvFile <agent.env> en mode -Unattended.'
       } else {
-        $url = (Read-Host '    SUPABASE_URL').Trim()
-        $key = (Read-Host '    SUPABASE_ANON_KEY (clé publique, jamais service_role)').Trim()
-        $email = (Read-Host '    E-mail du compte').Trim()
-        $secure = Read-Host '    Mot de passe du compte' -AsSecureString
-        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-        try { $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        # TLS 1.2 : certains Windows 10 avec PowerShell 5.1 ne l'activent pas par défaut.
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $verified = $false
+        for ($attempt = 1; $attempt -le 3 -and -not $verified; $attempt++) {
+          do { $url = (Read-Host '    SUPABASE_URL (https://....supabase.co)').Trim().TrimEnd('/') } until ($url -match '^https://[A-Za-z0-9.-]+$')
+          do { $key = (Read-Host '    SUPABASE_ANON_KEY (clé publique, jamais service_role)').Trim() } until ($key.Length -ge 20)
+          do { $email = (Read-Host '    E-mail du compte').Trim() } until ($email -match '^[^@\s]+@[^@\s]+$')
+          $secure = Read-Host '    Mot de passe du compte' -AsSecureString
+          $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+          try { $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+          finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+          # Vérification immédiate : connexion au compte avec ces valeurs (rien n'est enregistré côté serveur).
+          try {
+            $body = @{ email = $email; password = $password } | ConvertTo-Json
+            $session = Invoke-RestMethod -Method Post -Uri "$url/auth/v1/token?grant_type=password" -Headers @{ apikey = $key } `
+              -ContentType 'application/json' -Body $body -TimeoutSec 20
+            if ($session.access_token) { $verified = $true; Write-Ok "Connexion au tableau de bord vérifiée ($email)" }
+          } catch {
+            Write-Attention "Connexion refusée : $($_.Exception.Message)"
+            if ($attempt -lt 3) { Write-Note 'Vérifiez l''adresse, la clé, l''e-mail et le mot de passe, puis recommencez.' }
+          }
+          $body = $null
+          if (-not $verified) { $password = $null }
+        }
+        if (-not $verified) { throw 'Connexion au tableau de bord impossible après 3 essais : relancez install.cmd une fois les identifiants vérifiés.' }
         $envText = @(
           ('SUPABASE_URL=' + (Format-EnvValue $url)),
           ('SUPABASE_ANON_KEY=' + (Format-EnvValue $key)),
@@ -420,6 +524,38 @@ try {
     if ($vulnScanEnabled) { Write-Ok "Analyse toutes les $VulnScanHours h (première analyse 5 min après l'apprentissage)" }
     else { Write-Ok 'Analyse périodique désactivée (possible à la demande avec vulnscan.cmd)' }
 
+    Write-Step 'Interface (tableau de bord)'
+    Write-Note "Le capteur affiche lui-même le tableau de bord dans le navigateur (port $UiPort)."
+    $uiAvailable = Test-Path (Join-Path $InstallDir 'ui\index.html')
+    $uiEnabled = $false
+    if ($NoUi) {
+      Write-Ok 'Interface désactivée'
+    } elseif (-not $uiAvailable) {
+      Write-Attention 'Dossier « ui » absent du paquet : interface non installée.'
+    } elseif (-not $pushEnabled) {
+      Write-Attention 'L''interface a besoin du compte du tableau de bord (étape précédente) : non activée. Relancez avec -Reconfigure.'
+    } else {
+      $uiEnabled = Read-YesNo 'Activer l''interface sur ce PC (recommandé) ?' $true
+      if ($uiEnabled) {
+        if ($UiLocalOnly) { Write-Ok "Interface : http://localhost:$UiPort (ce PC seulement)" }
+        else { Write-Ok "Interface : http://$($env:COMPUTERNAME):$UiPort (visible depuis le réseau local, connexion par compte)" }
+      } else { Write-Ok 'Interface désactivée' }
+    }
+
+    Write-Step 'Lecture des switchs et points Wi-Fi (facultatif)'
+    Write-Note 'Avec un accès SNMP en lecture seule à vos switchs, la carte indique le port de chaque appareil, les liaisons'
+    Write-Note 'entre switchs et les appareils Wi-Fi de chaque point d''accès. Rien n''est modifié sur les équipements.'
+    $snmpFile = Join-Path $DataDir 'snmp.json'
+    if ($pushEnabled -and -not $Unattended -and (Read-YesNo 'Configurer la lecture des switchs maintenant ?' $false)) {
+      Set-SnmpConfig $snmpFile
+    } elseif (Test-Path $snmpFile) {
+      Write-Ok 'Lecture des switchs : configuration existante conservée'
+    } else {
+      Write-Ok 'Lecture des switchs non configurée (possible plus tard avec -Reconfigure)'
+    }
+    $notifyFile = Join-Path $DataDir 'notify.json'
+    if (-not $Unattended) { Invoke-TelegramStep $notifyFile $ClientName }
+
     # Une référence apprise sur un autre réseau ou une autre passerelle n'est plus valable.
     if ((Test-Path $baselineFile) -and $existing -and ($existing.gateway -ne $selected.Gateway)) {
       Remove-Item -Path $baselineFile -Force
@@ -441,6 +577,9 @@ try {
       honeypotAllow = $honeypotAllow
       vulnScan = $vulnScanEnabled
       vulnScanHours = $VulnScanHours
+      ui = $uiEnabled
+      uiPort = $UiPort
+      uiLan = (-not $UiLocalOnly)
       client = $ClientName
       authorizationRef = $AuthorizationRef
       authorizedBy = "$env:USERDOMAIN\$env:USERNAME"
@@ -454,6 +593,34 @@ try {
     $ClientName = [string]$existing.client
     $honeypotEnabled = [bool]$existing.honeypot
     $DefaultHoneypotPorts = @($existing.honeypotPorts | Where-Object { $_ })
+    $uiEnabled = [bool]$existing.ui
+    if ($existing.uiPort) { $UiPort = [int]$existing.uiPort }
+    $UiLocalOnly = ($null -ne $existing.uiLan) -and (-not [bool]$existing.uiLan)
+    if ($null -eq $existing.ui) {
+      # Mise à jour depuis une version sans interface : on propose de l'activer sans tout reconfigurer.
+      $uiReady = (-not $NoUi) -and $pushEnabled -and (Test-Path (Join-Path $InstallDir 'ui\index.html'))
+      if ($uiReady) {
+        Write-Step 'Interface (tableau de bord)'
+        Write-Note "Nouveau : le capteur peut afficher le tableau de bord dans le navigateur (port $UiPort)."
+        $uiEnabled = Read-YesNo 'Activer l''interface sur ce PC (recommandé) ?' $true
+        $existing | Add-Member -NotePropertyName ui -NotePropertyValue $uiEnabled -Force
+        $existing | Add-Member -NotePropertyName uiPort -NotePropertyValue $UiPort -Force
+        $existing | Add-Member -NotePropertyName uiLan -NotePropertyValue (-not $UiLocalOnly) -Force
+        Write-Utf8NoBom $configFile (($existing | ConvertTo-Json) + "`n")
+        if ($uiEnabled) { Write-Ok "Interface activée : http://localhost:$UiPort" } else { Write-Ok 'Interface désactivée' }
+      } else {
+        Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer l''interface (tableau de bord).'
+      }
+    }
+    # Mise à jour : la lecture des switchs est proposée si elle n'a jamais été configurée.
+    $snmpFile = Join-Path $DataDir 'snmp.json'
+    if ($pushEnabled -and -not $Unattended -and -not (Test-Path $snmpFile)) {
+      Write-Step 'Lecture des switchs et points Wi-Fi (facultatif)'
+      Write-Note 'Nouveau : avec un accès SNMP en lecture seule, la carte indique le port et le point Wi-Fi de chaque appareil.'
+      if (Read-YesNo 'Configurer la lecture des switchs maintenant ?' $false) { Set-SnmpConfig $snmpFile }
+    }
+    $notifyFile = Join-Path $DataDir 'notify.json'
+    if (-not $Unattended -and -not (Test-Path $notifyFile)) { Invoke-TelegramStep $notifyFile $ClientName }
     if (($null -eq $existing.honeypot) -or ($null -eq $existing.vulnScan)) {
       Write-Attention 'Configuration d''une version précédente : relancez avec -Reconfigure pour activer les leurres et l''analyse des vulnérabilités.'
     }
@@ -499,6 +666,12 @@ try {
   # les leurres ne verraient donc rien. La règle n'ouvre que les ports des leurres, seulement pour
   # le programme du capteur, et seulement depuis le réseau local (jamais depuis Internet).
   Get-NetFirewallRule -Group $FirewallGroup -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+  if ($uiEnabled -and -not $UiLocalOnly) {
+    New-NetFirewallRule -DisplayName 'CyberVeylix Sensor - interface web (réseau local uniquement)' -Group $FirewallGroup `
+      -Direction Inbound -Action Allow -Protocol TCP -LocalPort ([string]$UiPort) -Program $node `
+      -RemoteAddress LocalSubnet -Profile Any | Out-Null
+    Write-Ok "Pare-feu Windows : port $UiPort ouvert au réseau local pour l'interface"
+  }
   if ($honeypotEnabled -and $DefaultHoneypotPorts.Count -gt 0) {
     $portList = @($DefaultHoneypotPorts | ForEach-Object { [string]$_ })
     New-NetFirewallRule -DisplayName 'CyberVeylix Sensor - leurres (réseau local uniquement)' -Group $FirewallGroup `
@@ -506,6 +679,17 @@ try {
       -RemoteAddress LocalSubnet -Profile Any | Out-Null
     Write-Ok 'Pare-feu Windows : ports des leurres ouverts au réseau local, pour le capteur uniquement'
     Write-Note 'Si un autre pare-feu (antivirus) est actif, autorisez-y aussi le capteur.'
+  }
+
+  # Raccourci « CyberVeylix » sur le Bureau de tous les utilisateurs (ouvre l'interface dans le navigateur).
+  $desktop = [Environment]::GetFolderPath('CommonDesktopDirectory')
+  $shortcut = Join-Path $desktop 'CyberVeylix.url'
+  if ($uiEnabled) {
+    $shortcutText = "[InternetShortcut]`r`nURL=http://localhost:$UiPort/`r`n"
+    [System.IO.File]::WriteAllText($shortcut, $shortcutText, [System.Text.Encoding]::ASCII)
+    Write-Ok 'Raccourci « CyberVeylix » créé sur le Bureau'
+  } elseif (Test-Path $shortcut) {
+    Remove-Item -Path $shortcut -Force
   }
 
   # Entrée dans « Applications installées » : le client voit le logiciel et peut le désinstaller.
@@ -554,8 +738,24 @@ try {
     Write-Attention "Pas de confirmation après 25 s. Consultez le journal : $log"
   }
 
+  if ($uiEnabled -and $started) {
+    $uiOk = $false
+    for ($i = 0; $i -lt 10 -and -not $uiOk; $i++) {
+      try {
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:$UiPort/config.js" -UseBasicParsing -TimeoutSec 3
+        if ($r.StatusCode -eq 200) { $uiOk = $true }
+      } catch { Start-Sleep -Seconds 1 }
+    }
+    if ($uiOk) { Write-Ok "Interface en ligne : http://localhost:$UiPort" }
+    else { Write-Attention "L'interface ne répond pas sur le port $UiPort (port déjà utilisé ?). Voir le journal : $log" }
+  }
+
   Write-Host ''
   Write-Host 'Installation terminée.' -ForegroundColor Green
+  if ($uiEnabled) {
+    Write-Note "Interface           : http://localhost:$UiPort  (raccourci « CyberVeylix » sur le Bureau)"
+    if (-not $UiLocalOnly) { Write-Note "Depuis un autre PC  : http://$($env:COMPUTERNAME):$UiPort  (réseau local)" }
+  }
   Write-Note "Journal en direct   : Get-Content '$log' -Wait -Tail 20"
   Write-Note "Alertes (JSON)      : $(Join-Path $DataDir 'events.jsonl')"
   Write-Note "Rapports            : $DataDir\rapport-vulnerabilites-*.html (ouvrir dans un navigateur, imprimable en PDF)"

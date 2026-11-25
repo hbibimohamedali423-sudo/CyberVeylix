@@ -11,12 +11,13 @@
 import { createRequire } from 'node:module'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { hostname } from 'node:os'
+import { hostname, networkInterfaces } from 'node:os'
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, rmSync, statSync, renameSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArp } from './lib/parse-arp.mjs'
-import { parseDhcpServerReply } from './lib/parse-dhcp.mjs'
+import { parseDhcpServerReply, parseDhcpClientRequest } from './lib/parse-dhcp.mjs'
+import { parseLldp, parseCdp } from './lib/parse-lldp.mjs'
 import { createDetectors } from './lib/detectors.mjs'
 import { parseConfigText, resolveOptions, effectiveLearnMinutes } from './lib/options.mjs'
 import { createHoneypotMonitor } from './lib/honeypot-monitor.mjs'
@@ -25,6 +26,18 @@ import { isPrivateIpv4 } from './lib/vuln/scan.mjs'
 import { runVulnScan } from './lib/vuln/run.mjs'
 import { countBySeverity } from './lib/vuln/report.mjs'
 import { connectSupabase, createPusher } from './lib/push.mjs'
+import { startWebServer } from './lib/web-server.mjs'
+import { createCommandRunner } from './lib/commands.mjs'
+import { createActions } from './lib/actions.mjs'
+import { createLocalFixes } from './lib/fixes.mjs'
+import { createInventory, cidrOf } from './lib/inventory.mjs'
+import { createOui } from './lib/oui.mjs'
+import { parseSnmpConfig } from './lib/snmp-config.mjs'
+import { createSnmpClient } from './lib/snmp-client.mjs'
+import { createTopologySync } from './lib/topo-sync.mjs'
+import { parseNotifyConfig, createNotifier } from './lib/notify.mjs'
+import { createBlocker } from './lib/blocker.mjs'
+import dns from 'node:dns/promises'
 
 const require = createRequire(import.meta.url)
 const run = promisify(execFile)
@@ -49,7 +62,9 @@ const DATA = opts.dataDir || join(HERE, 'data')
 const BASELINE_FILE = join(DATA, 'baseline.json')
 const EVENTS_FILE = join(DATA, 'events.jsonl')
 const EVENTS_MAX_BYTES = 20 * 1024 * 1024
-const FILTER = 'arp or (udp and src port 67)'
+// ARP + DHCP (réponses des serveurs ET demandes des appareils : nom et système annoncés, pour l'inventaire).
+// ARP + DHCP + écoute passive de LLDP (ether 0x88cc) et CDP (vers 01:00:0c:cc:cc:cc) : le capteur n'émet rien.
+const FILTER = 'arp or (udp and (src port 67 or src port 68)) or ether proto 0x88cc or ether host 01:00:0c:cc:cc:cc'
 
 // --- Chargement de Npcap / libpcap ------------------------------------------
 let Cap
@@ -128,6 +143,10 @@ const detectors = createDetectors({
   bindings: saved?.bindings || [],
 })
 
+// Inventaire (lib/inventory.mjs) : créé AVANT la capture, connecté à la base plus tard (setClient).
+const oui = createOui()
+const inventory = createInventory({ oui })
+
 function saveBaseline() {
   const s = detectors.snapshot()
   writeFileSync(BASELINE_FILE, JSON.stringify({ savedAt: new Date().toISOString(), gatewayIp, ...s }, null, 2))
@@ -176,7 +195,37 @@ function report(events) {
     appendEvent(JSON.stringify({ at, ...e }))
   }
   if (opts.push && events.length) enqueue(async () => { const p = await pusher(); if (p) await p.pushAlerts(events) })
+  if (notifier && events.length) notifier.notify(events)
+  // Blocage automatique (réglage « auto_block » du capteur, désactivé par défaut) : géré par lib/actions.mjs.
+  if (opts.push && events.length) {
+    for (const e of events) {
+      Promise.resolve(autoActions && autoActions.maybeAutoBlock(e)).catch((err) => console.log('⚠ Blocage automatique : ' + err.message))
+    }
+  }
 }
+let autoActions = null // créé quand le lecteur de commandes démarre (nécessite la connexion au tableau de bord)
+
+// Alertes instantanées Telegram si notify.json existe (relu chaque minute ; jeton jamais affiché).
+const NOTIFY_FILE = join(DATA, 'notify.json')
+let notifier = null
+let notifyText = null
+function loadNotifier() {
+  try {
+    if (!existsSync(NOTIFY_FILE)) { notifier = null; notifyText = null; return }
+    const text = readFileSync(NOTIFY_FILE, 'utf8')
+    if (text === notifyText) return
+    notifyText = text
+    const parsed = parseNotifyConfig(text)
+    if (parsed.error) { notifier = null; console.log('⚠ Alertes Telegram désactivées : ' + parsed.error); return }
+    notifier = createNotifier({ config: parsed.config, client: config.client || '', host: hostname() })
+    console.log('Alertes Telegram : actives (gravité ' + parsed.config.minSeverity + ' et plus).')
+    notifier.sendText(`✅ CyberVeylix${config.client ? ` — ${config.client}` : ''} : capteur en service sur ${hostname()}. Les alertes importantes arriveront ici.`)
+  } catch (e) {
+    console.log('⚠ Alertes Telegram : ' + e.message)
+  }
+}
+loadNotifier()
+setInterval(loadNotifier, 60 * 1000).unref()
 
 // --- Capture -------------------------------------------------------------------------
 const device = pickDevice()
@@ -238,10 +287,18 @@ if (opts.honeypot) {
 cap.on('packet', (nbytes) => {
   const frame = Buffer.from(buffer.subarray(0, nbytes)) // copie : le tampon est réutilisé
   const now = Date.now()
+  const arp = parseArp(frame)
   const events = [
-    ...detectors.onArp(parseArp(frame), now),
+    ...detectors.onArp(arp, now),
     ...detectors.onDhcp(parseDhcpServerReply(frame), now),
   ]
+  // Inventaire : l'émetteur réel d'une trame ARP cohérente (pas une usurpation) et les demandes DHCP.
+  if (arp && arp.senderMac === arp.ethSrcMac) inventory.observe(arp.senderMac, arp.senderIp, now)
+  else {
+    const dhcpReq = parseDhcpClientRequest(frame)
+    if (dhcpReq) inventory.observeDhcp(dhcpReq, now)
+    else inventory.observeUplink(parseLldp(frame) || parseCdp(frame), now) // switch / point d'accès entendu
+  }
   if (events.length) report(events)
 })
 
@@ -249,16 +306,53 @@ cap.on('packet', (nbytes) => {
 // Cibles : les appareils appris par le capteur (jamais le PC du capteur lui-même), réseaux privés seulement.
 const sensorIp = interfaceIpv4(device)
 let vulnRunning = false
+
+// Audit LOCAL de ce PC (lecture seule : SMBv1, Bureau à distance sans NLA, Telnet) : le capteur ne s'analyse pas
+// par le réseau (ses leurres fausseraient le résultat), il lit directement son état. Voir lib/fixes.mjs.
+const localFixes = createLocalFixes({ hostname: hostname(), ip: sensorIp, dataDir: DATA })
+let localRunning = false
+async function localAuditAndSync() {
+  if (localRunning || !localFixes.supported) return { ran: false, findings: [] }
+  localRunning = true
+  try {
+    const r = await localFixes.audit()
+    if (r.ran) {
+      if (r.findings.length) console.log(`Audit de ce PC : ${r.findings.length} faiblesse(s) (${r.findings.map((f) => f.rule.replace('local-', '')).join(', ')}).`)
+      if (opts.push && (r.findings.length || r.fixed.length)) {
+        enqueue(async () => {
+          const p = await pusher()
+          if (p) await p.syncVulnerabilities({ findings: r.findings, fixed: r.fixed })
+        })
+        heartbeat()
+        await pushQueue
+      }
+    }
+    return r
+  } finally {
+    localRunning = false
+  }
+}
+// Premier audit 1 minute après le démarrage, puis toutes les 6 heures (et après chaque analyse / correction).
+setTimeout(() => { localAuditAndSync().catch((e) => console.log('⚠ Audit local : ' + e.message)) }, 60 * 1000).unref()
+setInterval(() => { localAuditAndSync().catch((e) => console.log('⚠ Audit local : ' + e.message)) }, 6 * 3600 * 1000).unref()
+
+// Renvoie un résultat { code, ... } (affiché dans la page pour les demandes « Analyser maintenant »).
 async function vulnScanOnce() {
-  if (vulnRunning) return // une analyse à la fois
+  if (vulnRunning) return { code: 'busy' } // une analyse à la fois
   vulnRunning = true
   try {
+    const local = await localAuditAndSync().catch(() => ({ ran: false, findings: [] }))
     const targets = [...new Set(detectors.snapshot().bindings.map((b) => b.ip))]
       .filter((ip) => isPrivateIpv4(ip) && ip !== sensorIp)
-    if (!targets.length) { console.log('Analyse de vulnérabilités : aucun appareil connu pour l\'instant.'); return }
+    if (!targets.length) {
+      console.log('Analyse de vulnérabilités : aucun appareil connu pour l\'instant.')
+      if (!local.ran) return { code: 'no_devices' }
+      const n0 = countBySeverity(local.findings)
+      return { code: 'scan_done', hosts: 0, findings: local.findings.length, ...n0 } // seul ce PC a été audité
+    }
     console.log(`Analyse de vulnérabilités de ${targets.length} appareil(s)…`)
     const r = await runVulnScan({ targets, dataDir: DATA, client: config.client || '' })
-    const n = countBySeverity(r.report.findings)
+    const n = countBySeverity([...r.report.findings, ...local.findings])
     console.log(`✔ Analyse terminée : ${r.report.findings.length} faiblesse(s) (critiques ${n.c}, hautes ${n.h}, moyennes ${n.m}, basses ${n.l}). Rapport : ${r.htmlFile}`)
     if (r.events.length) report(r.events)
     lastScanAt = new Date().toISOString()
@@ -270,9 +364,12 @@ async function vulnScanOnce() {
         await p.syncVulnerabilities({ findings: r.report.findings, fixed: r.fixed })
       })
       heartbeat()
+      await pushQueue // résultats écrits dans la base avant d'annoncer « terminé »
     }
+    return { code: 'scan_done', hosts: targets.length, findings: r.report.findings.length + local.findings.length, ...n }
   } catch (e) {
     console.log('⚠ Analyse de vulnérabilités impossible : ' + e.message)
+    return { code: 'error', failed: true, message: String(e.message).slice(0, 300) }
   } finally {
     vulnRunning = false
   }
@@ -306,6 +403,133 @@ if (learnMinutes > 0) {
 // après redémarrage ils ne seront plus « nouveaux » (l'alerte a déjà été émise et journalisée).
 // La MAC de la passerelle, elle, reste verrouillée sur la valeur apprise.
 setInterval(saveBaseline, 60 * 1000).unref()
+
+// Interface web (tableau de bord) servie par le capteur lui-même : http://<ce PC>:<port>.
+// Sans SUPABASE_URL / SUPABASE_ANON_KEY (agent.env) elle s'ouvre sur l'écran « Configuration requise ».
+// Un port déjà pris ou un dossier « ui » absent n'arrête jamais la surveillance.
+if (opts.ui) {
+  const uiRoot = join(HERE, 'ui')
+  if (!existsSync(join(uiRoot, 'index.html'))) {
+    console.log(`⚠ Interface web : dossier ${uiRoot} absent, non démarrée.`)
+  } else {
+    startWebServer({ root: uiRoot, port: opts.uiPort, host: opts.uiLan ? '0.0.0.0' : '127.0.0.1' })
+      .then((s) => console.log(`✔ Interface web : http://${hostname()}:${s.port}${opts.uiLan ? ' (réseau local)' : ' (ce PC seulement)'}`))
+      .catch((e) => console.log(`⚠ Interface web non démarrée (port ${opts.uiPort}) : ${e.message}`))
+  }
+}
+
+// Inventaire du réseau (réseau + appareils vus + identification) : toutes les 5 minutes, avec --push.
+// Le réseau n'est enregistré que pour la MAC de passerelle CONFIRMÉE (installateur) ou verrouillée par l'apprentissage.
+const ifaceInfo = (() => {
+  const d = Cap.deviceList().find((x) => x.name === device)
+  const a = d?.addresses.find((x) => x.addr === sensorIp && x.netmask)
+  const fromOs = Object.values(networkInterfaces()).flat().find((x) => x && x.address === sensorIp)
+  const testMac = process.env.CV_TEST_SENSOR_MAC
+  return { cidr: cidrOf(sensorIp, (a && a.netmask) || (fromOs && fromOs.netmask)), mac: (fromOs && fromOs.mac ? fromOs.mac.toLowerCase() : null) || (testMac || null) }
+})()
+inventory.setSubnet(ifaceInfo.cidr)
+let inventoryRunning = false
+async function inventoryOnce() {
+  if (!opts.push || inventoryRunning) return
+  inventoryRunning = true
+  try {
+    const p = await pusher()
+    if (!p) return
+    inventory.setClient(p.client)
+    const gatewayMac = opts.gatewayMac || saved?.gatewayMac || null
+    const networkId = await inventory.ensureNetwork({ gatewayMac, gatewayIp, name: config.client || null })
+    await inventory.sync({ networkId, gatewayIp, gatewayMac, sensorMac: ifaceInfo.mac })
+    // Switchs entendus passivement (LLDP / CDP) : aucun identifiant requis.
+    // Liaison directe écrite seulement sans lecture SNMP (sinon le SNMP fournit déjà la carte complète).
+    await inventory.syncUplinks({ networkId, sensorMac: ifaceInfo.mac, sensorIp, writeLinks: !existsSync(SNMP_FILE) })
+  } catch (e) {
+    console.log('⚠ Inventaire : ' + e.message)
+  } finally {
+    inventoryRunning = false
+  }
+}
+// Premier passage après 1 min (CV_TEST_INVENTORY_DELAY_MS : délai réduit pour le test d'intégration uniquement).
+setTimeout(inventoryOnce, Number(process.env.CV_TEST_INVENTORY_DELAY_MS) || 60 * 1000).unref()
+setInterval(inventoryOnce, 5 * 60 * 1000).unref()
+
+// Lecture des switchs et points Wi-Fi (SNMP, LECTURE SEULE) si snmp.json existe dans le dossier de données :
+// port de chaque appareil, liaisons entre équipements (LLDP / CDP), appareils Wi-Fi derrière leur point d'accès.
+// Le fichier est relu à chaque passage (ajout possible sans redémarrer). Ses identifiants ne quittent jamais ce PC.
+const SNMP_FILE = join(DATA, 'snmp.json')
+let topoSync = null
+let topoConfigText = null
+let topoRunning = false
+async function topologyOnce() {
+  if (!opts.push || topoRunning || !existsSync(SNMP_FILE)) return
+  topoRunning = true
+  try {
+    const text = readFileSync(SNMP_FILE, 'utf8')
+    if (text !== topoConfigText) {
+      topoConfigText = text
+      const parsed = parseSnmpConfig(text)
+      if (parsed.error) { topoSync = null; console.log('⚠ Lecture des switchs désactivée : ' + parsed.error); return }
+      const p = await pusher()
+      if (!p) return
+      topoSync = createTopologySync({ db: p.client, snmp: createSnmpClient(), config: parsed.config, oui })
+      console.log(`Lecture des switchs (SNMP) : ${parsed.config.credentials.length} identifiant(s), ${parsed.config.targets.length} équipement(s) listé(s), découverte ${parsed.config.auto ? 'automatique' : 'désactivée'}.`)
+    }
+    if (!topoSync) return
+    const p = await pusher()
+    if (!p) return
+    inventory.setClient(p.client)
+    const networkId = await inventory.ensureNetwork({ gatewayMac: opts.gatewayMac || saved?.gatewayMac || null, gatewayIp, name: config.client || null })
+    await topoSync.run({ networkId, gatewayIp })
+  } catch (e) {
+    console.log('⚠ Lecture des switchs : ' + e.message)
+  } finally {
+    topoRunning = false
+  }
+}
+setTimeout(topologyOnce, Number(process.env.CV_TEST_TOPOLOGY_DELAY_MS) || 2 * 60 * 1000).unref()
+setInterval(topologyOnce, 15 * 60 * 1000).unref()
+
+// Demandes de la page web (table sensor_commands) : « Analyser maintenant ». Liste blanche de gestionnaires ;
+// tout autre type reçoit un refus explicite (les blocages et corrections arrivent dans une version ultérieure).
+if (opts.push) {
+  pusher().then((p) => {
+    if (!p) return
+    // Adresses du tableau de bord (Supabase) : jamais bloquables, sinon le capteur se couperait lui-même.
+    let serviceCache = { at: 0, ips: [] }
+    const serviceIps = async () => {
+      if (Date.now() - serviceCache.at < 10 * 60 * 1000) return serviceCache.ips
+      try {
+        const host = new URL(process.env.SUPABASE_URL).hostname
+        serviceCache = { at: Date.now(), ips: await dns.resolve4(host) }
+      } catch { serviceCache = { at: Date.now(), ips: serviceCache.ips } }
+      return serviceCache.ips
+    }
+    const runner = createCommandRunner({
+      client: p.client,
+      sensorName: hostname(),
+      handlers: {
+        // « Analyser maintenant » rafraîchit aussi la carte du réseau (lecture des switchs, si configurée).
+        scan_now: async () => { const r = await vulnScanOnce(); topologyOnce().catch(() => {}); return r },
+        block_ip: (params) => autoActions.handlers.block_ip(params),
+        unblock_ip: (params) => autoActions.handlers.unblock_ip(params),
+        // Corrections de la liste blanche (lib/fixes.mjs), sur CE PC seulement ; re-audit aussitôt après.
+        fix: async (params) => {
+          const r = await localFixes.applyFix(params && params.id)
+          if (r.code === 'fix_done' || r.code === 'fix_already') await localAuditAndSync().catch(() => {})
+          return r
+        },
+      },
+    })
+    autoActions = createActions({
+      client: p.client,
+      getSensorId: runner.getSensorId,
+      blocker: createBlocker(),
+      context: () => ({ gatewayIp, sensorIp, dhcp: detectors.snapshot().trustedDhcpServers || [] }),
+      serviceIps,
+    })
+    runner.start()
+    console.log('Commandes de la page web : à l\'écoute (analyse, blocage, déblocage et corrections ; toutes les 5 s).')
+  })
+}
 
 // Pouls toutes les 5 minutes : l'application affiche « en service » ou « arrêté depuis… ».
 heartbeat()

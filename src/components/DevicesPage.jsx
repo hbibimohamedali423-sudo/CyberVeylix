@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { TYPES, STATUS, NETWORK_FILTER_NONE } from '../constants'
+import { Fragment, useState } from 'react'
+import { ALERT_STATUS, NETWORK_FILTER_NONE, SEV, STATUS, TYPES } from '../constants'
+import { CveLinks, ConfidenceLabel } from './FindingBits.jsx'
 import { useI18n } from '../i18n/context.js'
 import './DevicesPage.css'
 
@@ -13,6 +14,7 @@ const typeLabelOf = (t, type) => {
 export default function DevicesPage({
   devices,
   services = [],
+  vulns = [],
   networks = [],
   onAddClick,
   onUpdate,
@@ -25,6 +27,7 @@ export default function DevicesPage({
   const [st, setSt] = useState('')
   const [networkFilter, setNetworkFilter] = useState('')
   const [editId, setEditId] = useState(null)
+  const [openId, setOpenId] = useState(null)
   const [draft, setDraft] = useState({})
   const [err, setErr] = useState('')
 
@@ -135,15 +138,26 @@ export default function DevicesPage({
                   <td><button onClick={save}>{t('devicesPage.save')}</button><button className="x" onClick={() => { setEditId(null); setErr('') }}>{t('devicesPage.cancel')}</button></td>
                 </tr>
               ) : (
-                <tr key={d.id}>
-                  <td>{d.name}</td>
+                <Fragment key={d.id}>
+                <tr>
+                  <td>{d.name}{(d.vendor || d.hostname) && <div className="m">{[d.vendor, d.hostname && d.hostname !== d.name ? d.hostname : null].filter(Boolean).join(' · ')}</div>}</td>
                   <td>{d.ip || '—'}{d.mac && <div className="m">{d.mac}</div>}</td>
                   <td>{networkLabel(d.network_id)}</td>
                   <td>{typeLabelOf(t, d.type)}</td>
                   <td style={{ color: s?.color }}>● {s ? t(`status.${d.status}`) : (d.status || '—')}</td>
                   <td>{ports(d)}</td><td>{seen(d)}</td>
-                  <td><button className="x" onClick={() => startEdit(d)}>{t('devicesPage.edit')}</button><button className="del" onClick={() => del(d)}>{t('devicesPage.delete')}</button></td>
+                  <td>
+                    <button className="x" aria-expanded={openId === d.id} aria-label={t('deviceDetail.ariaToggle', { name: d.name })}
+                      onClick={() => setOpenId(openId === d.id ? null : d.id)}>{openId === d.id ? t('deviceDetail.hide') : t('deviceDetail.show')}</button>
+                    <button className="x" onClick={() => startEdit(d)}>{t('devicesPage.edit')}</button><button className="del" onClick={() => del(d)}>{t('devicesPage.delete')}</button>
+                  </td>
                 </tr>
+                {openId === d.id && (
+                  <tr className="dev-detail"><td colSpan={8}>
+                    <DeviceDetail device={d} services={services.filter((x) => x.device_id === d.id)} vulns={vulns.filter((v) => v.device_id === d.id)} />
+                  </td></tr>
+                )}
+                </Fragment>
               )
             })}
           </tbody>
@@ -156,6 +170,66 @@ export default function DevicesPage({
         <UnassignedPanel devices={unassigned} networks={networks} onUpdate={onUpdate} />
       )}
       <NetworkManager networks={networks} devices={devices} onUpdate={onNetworkUpdate} onRemove={onNetworkRemove} />
+    </div>
+  )
+}
+
+const byPort = (a, b) => (Number(a.port) || 0) - (Number(b.port) || 0)
+
+// Services enregistrés (port, version annoncée) et vulnérabilités liées à l'appareil.
+const ROLES = ['gateway', 'switch', 'access_point', 'server', 'workstation', 'printer', 'camera', 'iot', 'phone', 'other']
+// Identification automatique (capteur) : la preuve est stockée avec le préfixe « Capteur : ».
+const evidenceText = (v) => String(v || '').replace(/^Capteur : /, '')
+
+function DeviceDetail({ device = {}, services, vulns }) {
+  const { t, locale } = useI18n()
+  const when = (v) => (v ? new Date(v).toLocaleString(locale) : '—')
+  const sevOf = (k) => SEV.find((x) => x.k === k)
+  const stOf = (k) => ALERT_STATUS.find((x) => x.k === k)
+  return (
+    <div className="dev-detail-grid">
+      <section className="dev-ident">
+        <h4>{t('ident.title')}</h4>
+        <dl>
+          <dt>{t('ident.vendor')}</dt><dd>{device.vendor || (device.mac && /^[0-9a-f][26ae]:/i.test(device.mac) ? t('ident.randomMac') : '—')}</dd>
+          <dt>{t('ident.hostname')}</dt><dd dir="auto">{device.hostname || '—'}</dd>
+          <dt>{t('ident.mac')}</dt><dd dir="ltr">{device.mac || '—'}</dd>
+          <dt>{t('ident.role')}</dt><dd>{device.role && ROLES.includes(device.role) ? t(`ident.roles.${device.role}`) : '—'}</dd>
+          <dt>{t('ident.confidence')}</dt><dd><ConfidenceLabel value={device.role_confidence} /></dd>
+          <dt>{t('ident.evidence')}</dt><dd>{device.role_evidence ? evidenceText(device.role_evidence) : '—'}</dd>
+        </dl>
+      </section>
+      <section>
+        <h4>{t('deviceDetail.services')} ({services.length})</h4>
+        {!services.length ? <p className="m">{t('deviceDetail.noServices')}</p> : (
+          <table className="dev-sub">
+            <thead><tr><th>{t('deviceDetail.port')}</th><th>{t('deviceDetail.protocol')}</th><th>{t('deviceDetail.service')}</th><th>{t('deviceDetail.version')}</th><th>{t('deviceDetail.lastSeen')}</th></tr></thead>
+            <tbody>{services.slice().sort(byPort).map((x) => (
+              <tr key={x.id}><td dir="ltr">{x.port ?? '—'}</td><td>{x.protocol || '—'}</td><td>{x.service || '—'}</td><td dir="ltr">{x.version || '—'}</td><td>{when(x.last_seen)}</td></tr>
+            ))}</tbody>
+          </table>
+        )}
+      </section>
+      <section>
+        <h4>{t('deviceDetail.vulns')} ({vulns.length})</h4>
+        {!vulns.length ? <p className="m">{t('deviceDetail.noVulns')}</p> : (
+          <table className="dev-sub">
+            <thead><tr><th>{t('alertsPage.colTitle')}</th><th>{t('alertsPage.colSev')}</th><th>{t('alertsPage.colStatus')}</th><th>{t('vulnDetail.colCve')}</th></tr></thead>
+            <tbody>{vulns.map((v) => {
+              const s = sevOf(v.severity)
+              const st = stOf(v.status || 'open')
+              return (
+                <tr key={v.id}>
+                  <td>{v.title}</td>
+                  <td style={{ color: s?.color }}>● {s ? t(`sev.${v.severity}`) : (v.severity || '—')}</td>
+                  <td style={{ color: st?.color }}>● {st ? t(`alertStatus.${v.status || 'open'}`) : v.status}</td>
+                  <td><CveLinks row={v} /></td>
+                </tr>
+              )
+            })}</tbody>
+          </table>
+        )}
+      </section>
     </div>
   )
 }

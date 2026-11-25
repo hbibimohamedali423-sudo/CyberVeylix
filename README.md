@@ -1,3 +1,35 @@
+# CyberVeylix
+
+Surveillance de sécurité d'un réseau local : un **capteur** installé sur un PC Windows qui reste allumé dans le
+réseau, et un **tableau de bord** (React + Supabase) que le capteur sert lui-même dans le navigateur.
+
+## Installation sur le PC permanent (résumé)
+1. Télécharger le paquet `cyberveylix-sensor-<version>-windows-x64.zip` (release GitHub, ou artefact du workflow
+   « Capteur Windows » dans l'onglet Actions). Clic droit → Propriétés → « Débloquer », puis « Extraire tout ».
+2. Double-cliquer sur `install.cmd` et répondre aux questions (Npcap proposé s'il manque ; relier au tableau de bord
+   avec l'URL du projet Supabase, la clé **publique** et votre compte : la connexion est vérifiée sur place).
+3. Ouvrir le raccourci **CyberVeylix** du Bureau (`http://localhost:8710`) et se connecter.
+
+Base de données : exécuter dans l'ordre les scripts de `supabase/` (voir plus bas), dont `schema_r1_results.sql`,
+`schema_r4_actions.sql` et `schema_r5_hardening.sql` pour le capteur. Détails du capteur : `sensor/README.md`.
+
+## Ce que fait la plateforme
+- Inventaire et topologie du réseau, alertes d'intrusion en temps réel (usurpation de passerelle, DHCP pirate,
+  usurpation ARP, leurres touchés…), analyse non intrusive des vulnérabilités (CVE, preuves, corrections).
+- Depuis le tableau de bord : analyse immédiate, blocage / déblocage d'une adresse dans le pare-feu du PC du capteur
+  (manuel ou automatique), correction des réglages dangereux de ce PC (SMBv1, RDP sans NLA, Telnet), journal de
+  surveillance, rapport imprimable en PDF. Interface en 5 langues (fr, en, de, ar, it).
+- Topologie : vue d'ensemble par réseau, et « Branchements réels » (passerelle → switchs → ports → appareils, câble
+  ou Wi-Fi, constaté ou déduit avec sa preuve) quand le capteur lit les switchs en SNMP (lecture seule) ; inventaire
+  détaillé par type (caméras, téléphones, ordinateurs, imprimantes, objets connectés…) identifié automatiquement.
+- Toutes les valeurs affichées viennent des enregistrements de la base : rien n'est simulé.
+
+## Vérifications
+`npm run lint`, `npm test`, `npm run build`, puis `npm run test:integration` (vrai capteur avec carte réseau
+simulée et fausse base locale).
+
+---
+
 # Agent de découverte réseau CyberVeylix
 
 Inventorie les appareils de **votre** réseau local et les envoie à votre compte CyberVeylix.

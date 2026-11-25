@@ -61,6 +61,10 @@ export function resolveOptions(argv, config = {}) {
     vulnScan: flag('vuln-scan') || (config.vulnScan === true && !flag('no-vuln-scan')),
     vulnScanHours: 24,
     vulnFirstDelayMinutes: 5, // délai après l'apprentissage avant la première analyse
+    // Interface web servie par le capteur (dossier « ui » à côté de listener.mjs). Réseau local par défaut.
+    ui: flag('ui') || (config.ui === true && !flag('no-ui')),
+    uiPort: 8710,
+    uiLan: !flag('ui-local') && config.uiLan !== false,
   }
 
   const bounded = (raw, label, min, max) => {
@@ -75,6 +79,13 @@ export function resolveOptions(argv, config = {}) {
   const delay = bounded(pick('vuln-first-delay', 'vulnFirstDelayMinutes'), '--vuln-first-delay', 0, 1440)
   if (delay.error) return { error: delay.error }
   if (delay.value !== null) opts.vulnFirstDelayMinutes = delay.value
+
+  const uiPort = bounded(pick('ui-port', 'uiPort'), '--ui-port', 1024, 65535)
+  if (uiPort.error) return { error: uiPort.error }
+  if (uiPort.value !== null) {
+    if (!Number.isInteger(uiPort.value)) return { error: '--ui-port doit être un entier entre 1024 et 65535.' }
+    opts.uiPort = uiPort.value
+  }
 
   const list = (cliName, cfgName) => {
     const v = value(cliName)

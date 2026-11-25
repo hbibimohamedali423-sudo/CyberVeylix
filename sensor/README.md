@@ -73,10 +73,122 @@ considéré comme corrigé). Avec `--push`, les faiblesses rejoignent la page «
 **Limites** : la base de règles est courte et vérifiée, pas exhaustive. L'absence de résultat ne prouve pas
 l'absence de vulnérabilité.
 
+## Inventaire et identification des appareils
+Avec `--push`, le capteur inventorie son réseau toutes les 5 minutes (premier passage 1 min après le démarrage) :
+- **Réseau** : enregistré dans `networks` pour la MAC de passerelle confirmée à l'installation (nom = client),
+  avec son sous-réseau (ex. `10.15.0.0/16`). Jamais pour une MAC simplement apprise ou annoncée par un tiers.
+- **Appareils** : chaque MAC vue (ARP cohérent, demandes DHCP) devient un appareil du réseau, suivi par sa MAC
+  même si son IP change. « Hors ligne » après 2 h d'absence (appareils découverts par le capteur seulement).
+- **Identification** (rôle + type + confiance + preuve, colonne `role_evidence` « Capteur : … ») : fabricant
+  (registre IEEE, paquet `oui-data`), nom et système annoncés en DHCP (« android-dhcp », « MSFT 5.0 »…), ports
+  relevés par l'analyse, MAC aléatoire (téléphones récents). Sans indice : rien n'est inventé.
+- Un nom, un type ou un rôle saisis à la main ne sont **jamais** écrasés.
+- Limite : un PC seul ne voit pas sur quel port de switch ni sur quel point Wi-Fi chaque appareil est branché ;
+  cela demande la lecture des switchs (SNMP, en lecture seule).
+
+## Écoute passive LLDP / CDP (sans aucun identifiant)
+Toujours active, sans configuration : le capteur **entend** (sans rien émettre) les trames LLDP (802.1AB) et CDP que
+le switch — ou le point d'accès — auquel il est branché diffuse sur son port. Il en déduit, **sans mot de passe ni
+autorisation préalable et sans toucher à l'équipement** : le nom du switch, son modèle, son adresse de gestion, et le
+port exact où le capteur est connecté (lien « switch → ce PC », constaté). C'est utile quand le client a perdu les
+accès SNMP. Limite : cela ne révèle que le switch du capteur, pas le port des autres appareils (cela, seul le SNMP
+le donne). Si le SNMP est configuré, il fournit la carte complète et cette liaison passive n'est pas dupliquée.
+
+## Lecture des switchs et points Wi-Fi (SNMP, lecture seule)
+Facultatif. Avec `snmp.json` dans le dossier de données (créé par l'installateur, ou à la main), le capteur lit
+toutes les 15 minutes (et à chaque « Analyser maintenant ») les tables **standard** des équipements, communes à
+Cisco, Aruba, TP-Link, D-Link… : table des MAC par port (BRIDGE-MIB / Q-BRIDGE-MIB), voisins LLDP (et CDP pour
+Cisco), noms des ports (IF-MIB), table ARP (IP-MIB). Il en déduit :
+- le **port exact** de chaque appareil (les ports de liaison entre switchs sont écartés) ;
+- les **liaisons entre switchs** et vers les points d'accès (LLDP / CDP, constatées) ;
+- les appareils **Wi-Fi** derrière chaque point d'accès qui annonce LLDP (déduit) ;
+- un port partagé par plusieurs appareils sans LLDP est signalé comme tel (switch non géré, hub ou Wi-Fi).
+
+Règles : GET / GETBULK uniquement (aucune écriture) ; adresses privées seulement ; 64 équipements au plus par
+passage ; parcours bornés (lignes, durée, boucle détectée) ; identifiants (SNMPv2c « community » ou SNMPv3 avec
+authentification SHA et chiffrement AES, recommandé) **jamais** envoyés à la base, à la page ni au journal.
+```json
+{ "credentials": [ { "version": "2c", "community": "…" },
+                   { "version": "3", "user": "…", "authProtocol": "sha256", "authKey": "…", "privProtocol": "aes", "privKey": "…" } ],
+  "targets": ["10.15.0.2", "10.15.0.3"], "auto": true }
+```
+Limites : un switch non géré ne peut pas être lu ; les points d'accès pilotés par un contrôleur qui « tunnelise »
+le trafic montrent leurs clients derrière le contrôleur ; l'association exacte d'un client Wi-Fi à un point
+d'accès sans LLDP n'est pas déterminable par les MIB standard.
+
+## Alertes instantanées sur téléphone (Telegram)
+Facultatif. Avec `notify.json` dans le dossier de données (créé par l'installateur : jeton vérifié auprès de
+Telegram, conversation trouvée après « /start », message de test), les alertes **critiques et hautes** sont envoyées
+aussitôt : usurpation de la passerelle, DHCP pirate, balayage ou tentative de connexion sur les leurres, nouvelle
+faiblesse critique… Regroupées (une fenêtre de 10 s = un message), 30 messages par heure au plus. Un message
+« capteur en service » confirme la configuration à chaque démarrage. Le jeton du bot ne quitte jamais ce PC
+(jamais en base, ni dans la page, ni dans le journal, même en cas d'erreur).
+```json
+{ "telegram": { "token": "123456789:AA…", "chatId": "987654321" }, "minSeverity": "h" }
+```
+
+## Interface (tableau de bord)
+L'installateur place le tableau de bord dans le dossier `ui` et le capteur le sert lui-même : aucun site
+externe à installer. Sur le PC : raccourci **CyberVeylix** sur le Bureau, ou `http://localhost:8710`.
+Depuis un autre appareil du réseau local : `http://<nom du PC>:8710`.
+
+- La connexion se fait avec le compte du tableau de bord ; la page ne contient que l'URL du projet et la clé
+  publique « anon » (`/config.js`), jamais le mot de passe du compte ni une clé `service_role`.
+- Pare-feu : règle limitée au réseau local (`LocalSubnet`) et au programme du capteur, jamais Internet.
+  `-UiLocalOnly` : ce PC seulement (pas de règle). `-NoUi` : pas d'interface. `-UiPort 9000` : autre port.
+- Nécessite l'envoi au tableau de bord (`-Push` / compte renseigné à l'installation).
+- À la main : `node listener.mjs --yes --ui [--ui-port=8710] [--ui-local]`.
+
+## Demandes de la page web
+Avec l'envoi au tableau de bord (`--push`), le capteur consulte toutes les 5 s la table `sensor_commands`.
+La page « Analyse & Scan » y dépose une demande ; le capteur la réclame (une seule fois), l'exécute lui-même
+et écrit le résultat. Le navigateur n'exécute jamais rien sur le réseau.
+- **Liste blanche** : `scan_now` (analyse), `block_ip` / `unblock_ip` (blocage) et `fix` (correction de CE PC).
+  Tout autre type est refusé explicitement (« non pris en charge »).
+- Une demande de plus de 15 minutes n'est pas exécutée (le capteur était éteint) ; une demande « en cours » lors
+  d'un redémarrage est marquée en échec.
+- Ne vise que les appareils déjà connus du capteur, réseaux privés uniquement (comme l'analyse périodique).
+
+## Bloquer une adresse
+Dans « Menaces & Incidents », chaque alerte dont l'adresse du fautif est fiable (leurre touché, serveur DHCP pirate,
+nouvel appareil) porte un bouton **Bloquer**. Pour une usurpation de passerelle ou ARP, l'IP annoncée est celle de la
+victime imitée : seule la **MAC** est affichée, pour retrouver l'appareil.
+- Le capteur pose deux règles du **pare-feu Windows de son PC** (`CyberVeylix-Block-<ip>`, entrante et sortante),
+  sans shell, avec une adresse validée strictement. Le débloquage les retire. Cela protège **ce PC**, pas tout le réseau
+  (bloquer au niveau du routeur dépend de son modèle : non fait ici).
+- **Jamais bloquables** : la passerelle, le PC du capteur, le serveur DHCP de confiance, les adresses du tableau de bord
+  (Supabase), la liste `trusted_ips` du capteur, et les adresses 0.x, 127.x, 224.x–255.x.
+- **Blocage automatique** (colonne `sensors.auto_block`, désactivé par défaut) : seulement après un balayage de leurres
+  ou une tentative d'intrusion sur un leurre, 20 blocages par heure au plus, mêmes garde-fous.
+- La table `blocked_ips` est écrite par le capteur (résultat réel du pare-feu) ; les règles survivent au redémarrage.
+
+## Audit de ce PC et bouton « Corriger »
+Le PC du capteur n'est jamais analysé par le réseau (ses leurres ouverts fausseraient le résultat) : le capteur lit
+directement son état (lecture seule, 1 min après le démarrage, toutes les 6 h, et à chaque analyse) :
+SMBv1 activé, Bureau à distance sans NLA, service Telnet en cours d'exécution. Chaque faiblesse apparaît dans
+« Vulnérabilités » (clé `local:<pc>:<id>`, confiance « certaine ») avec un bouton **Corriger** :
+| Correction | Effet | Conséquence à connaître |
+|---|---|---|
+| `smbv1` | `Set-SmbServerConfiguration -EnableSMB1Protocol $false` | Très anciens appareils (XP, vieux NAS) privés de partages |
+| `rdp_nla` | Registre RDP-Tcp `UserAuthentication = 1` | Très anciens clients sans NLA refusés |
+| `telnet` | Arrêt et désactivation du service `TlntSvr` | Plus de connexion Telnet à ce PC |
+
+Scripts PowerShell **constants** (aucun texte venant de la page n'est exécuté). Avant d'agir, le capteur relit l'état ;
+après, il vérifie : il ne répond « corrigé » que si la faiblesse a réellement disparu, puis met la page à jour.
+Les autres appareils (caméras, imprimantes…) ne sont jamais modifiés à distance : leurs faiblesses gardent les
+instructions de correction.
+
+## Test d'intégration
+`npm run build` puis `npm run test:integration` lance le vrai `listener.mjs` avec une carte réseau simulée
+(`test/integration/stubmods/cap`) et une fausse base Supabase locale : pouls, interface servie, `/config.js` sans
+secret, et exécution des demandes (analyse, blocage refusé pour la passerelle, etc.).
+
 ## Ce qu'il ne fait pas
-- Il ne bloque rien et n'isole aucun appareil (les leurres observent, ils ne ripostent pas).
+- Il ne bloque rien de lui-même au niveau du réseau : le blocage (à votre demande, ou automatique si activé) ne concerne
+  que le pare-feu du PC du capteur.
 - Il ne voit que le trafic **diffusé** (ARP, DHCP) : il ne voit pas la navigation des autres appareils.
-- Il ne corrige pas lui-même les appareils : le rapport donne les corrections, l'analyse suivante vérifie qu'elles sont faites.
+- Il ne corrige jamais les AUTRES appareils : leur rapport donne les corrections, l'analyse suivante vérifie qu'elles sont faites.
+  Seul le PC du capteur peut être corrigé, à votre demande, avec les trois corrections ci-dessus.
 
 ## Installation (Windows)
 1. Installer **Node.js 20.6 ou plus récent**.

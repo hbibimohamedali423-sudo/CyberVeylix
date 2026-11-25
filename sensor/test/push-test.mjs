@@ -1,6 +1,6 @@
 // Tests de l'envoi au tableau de bord (lib/push.mjs) avec un faux client Supabase en mémoire.
 import assert from 'node:assert/strict'
-import { createPusher, isMissingColumn } from '../lib/push.mjs'
+import { createPusher, isMissingColumn, scopeToUser } from '../lib/push.mjs'
 
 // Faux client : tables en mémoire ; `missing` liste les colonnes « absentes » (base sans R1),
 // `noSensors` simule l'absence de la table sensors.
@@ -147,6 +147,45 @@ export function pushChecks(check, checkAsync) {
     assert.equal(sb.db.alerts[0].device_id, 'dev-nas')
     assert.equal(sb.db.alerts[1].device_id, null) // appareil inconnu : rien d'inventé
     assert.ok(sb.db.alerts.every((a) => a.network_id === 'net-bureau'))
+  })
+
+  checkAsync('Envoi : adresse source seulement quand elle désigne le fautif ; MAC toujours', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    await p.pushAlerts([
+      { type: 'honeypot_scan', severity: 'c', ip: '192.168.1.99', mac: 'aa:bb:cc:00:00:99', title: 'Balayage', detail: 'd' },
+      { type: 'rogue_dhcp', severity: 'c', ip: '192.168.1.20', mac: 'aa:bb:cc:00:00:20', title: 'DHCP', detail: 'd' },
+      // IP = celle de la passerelle imitée (la victime) : jamais proposée comme adresse à bloquer.
+      { type: 'gateway_spoof', severity: 'c', ip: '192.168.1.1', mac: 'de:ad:be:ef:00:01', title: 'Usurpation', detail: 'd' },
+      { type: 'arp_spoof_sweep', severity: 'h', ip: '192.168.1.5', mac: 'de:ad:be:ef:00:02', title: 'ARP', detail: 'd' },
+      { type: 'vuln_new', severity: 'h', title: 'Nouvelle faiblesse', detail: 'd' },
+    ])
+    assert.deepEqual(sb.db.alerts.map((a) => a.source_ip), ['192.168.1.99', '192.168.1.20', null, null, null])
+    assert.deepEqual(sb.db.alerts.map((a) => a.source_mac), ['aa:bb:cc:00:00:99', 'aa:bb:cc:00:00:20', 'de:ad:be:ef:00:01', 'de:ad:be:ef:00:02', null])
+  })
+
+  checkAsync('Envoi : base sans R4 → alertes envoyées sans adresse source, R1 conservé', async () => {
+    const logs = []
+    const sb = fakeSupabase({ tables: base(), missing: ['source_ip', 'source_mac'] })
+    const p = createPusher(sb, { gatewayMac: GW, log: (m) => logs.push(m), now })
+    await p.pushAlerts([{ type: 'honeypot_scan', severity: 'c', ip: '192.168.1.99', mac: 'aa:bb:cc:00:00:99', title: 'Balayage', detail: 'd' }])
+    await p.pushAlerts([{ type: 'new_device', severity: 'm', ip: '192.168.1.98', title: 'Nouveau', detail: 'd' }])
+    assert.equal(sb.db.alerts.length, 2)
+    assert.equal(sb.db.alerts[0].source, 'honeypot') // colonnes R1 toujours envoyées
+    assert.equal(sb.db.alerts[0].source_ip, undefined)
+    assert.equal(p.r1, true)
+    assert.equal(logs.filter((m) => m.includes('R4')).length, 1) // message une seule fois
+  })
+
+  check('lectures du capteur limitées à son compte (données partagées d\'autres comptes ignorées)', () => {
+    const calls = []
+    const builder = { select: (...a) => { calls.push(['select', ...a]); return { eq: (c, v) => { calls.push(['eq', c, v]); return 'filtré' } } }, update: (p) => { calls.push(['update', p]); return 'maj' }, insert: (r) => { calls.push(['insert', r]); return 'ins' } }
+    const scoped = scopeToUser({ auth: 'A', from: () => builder }, 'u-capteur')
+    assert.equal(scoped.from('devices').select('id,ip'), 'filtré')
+    assert.deepEqual(calls.slice(0, 2), [['select', 'id,ip'], ['eq', 'user_id', 'u-capteur']])
+    assert.equal(scoped.from('devices').update({ a: 1 }), 'maj') // écritures inchangées
+    assert.equal(scoped.from('devices').insert({ a: 1 }), 'ins')
+    assert.equal(scoped.auth, 'A')
   })
 
   checkAsync('Envoi : réseau inconnu → network_id vide (aucun réseau deviné)', async () => {
