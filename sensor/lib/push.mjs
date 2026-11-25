@@ -43,9 +43,29 @@ export async function connectSupabase(env, log = console.log) {
   }
   const { createClient } = await import('@supabase/supabase-js')
   const client = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, { auth: { persistSession: false } })
-  const { error } = await client.auth.signInWithPassword({ email: env.CV_EMAIL, password: env.CV_PASSWORD })
+  const { data, error } = await client.auth.signInWithPassword({ email: env.CV_EMAIL, password: env.CV_PASSWORD })
   if (error) { log('⚠ Envoi au tableau de bord : connexion refusée : ' + error.message); return null }
-  return client
+  const uid = data && data.user && data.user.id
+  return uid ? scopeToUser(client, uid) : client
+}
+
+// Toutes les LECTURES du capteur sont limitées aux données de son propre compte (user_id) : même si d'autres
+// comptes partagent leurs données avec ce compte (lecture partagée, R8), le capteur ne les voit ni ne les mélange.
+// Écritures inchangées (les politiques « propriétaire » les limitent déjà au compte).
+export function scopeToUser(client, uid) {
+  return {
+    auth: client.auth,
+    from(table) {
+      const builder = client.from(table)
+      return new Proxy(builder, {
+        get(target, prop) {
+          if (prop === 'select') return (...args) => target.select(...args).eq('user_id', uid)
+          const v = target[prop]
+          return typeof v === 'function' ? v.bind(target) : v
+        },
+      })
+    },
+  }
 }
 
 // gatewayMac : MAC de la passerelle du réseau surveillé (valeur ou fonction, car le capteur peut

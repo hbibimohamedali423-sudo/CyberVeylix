@@ -1,6 +1,6 @@
 // Tests de l'envoi au tableau de bord (lib/push.mjs) avec un faux client Supabase en mémoire.
 import assert from 'node:assert/strict'
-import { createPusher, isMissingColumn } from '../lib/push.mjs'
+import { createPusher, isMissingColumn, scopeToUser } from '../lib/push.mjs'
 
 // Faux client : tables en mémoire ; `missing` liste les colonnes « absentes » (base sans R1),
 // `noSensors` simule l'absence de la table sensors.
@@ -175,6 +175,17 @@ export function pushChecks(check, checkAsync) {
     assert.equal(sb.db.alerts[0].source_ip, undefined)
     assert.equal(p.r1, true)
     assert.equal(logs.filter((m) => m.includes('R4')).length, 1) // message une seule fois
+  })
+
+  check('lectures du capteur limitées à son compte (données partagées d\'autres comptes ignorées)', () => {
+    const calls = []
+    const builder = { select: (...a) => { calls.push(['select', ...a]); return { eq: (c, v) => { calls.push(['eq', c, v]); return 'filtré' } } }, update: (p) => { calls.push(['update', p]); return 'maj' }, insert: (r) => { calls.push(['insert', r]); return 'ins' } }
+    const scoped = scopeToUser({ auth: 'A', from: () => builder }, 'u-capteur')
+    assert.equal(scoped.from('devices').select('id,ip'), 'filtré')
+    assert.deepEqual(calls.slice(0, 2), [['select', 'id,ip'], ['eq', 'user_id', 'u-capteur']])
+    assert.equal(scoped.from('devices').update({ a: 1 }), 'maj') // écritures inchangées
+    assert.equal(scoped.from('devices').insert({ a: 1 }), 'ins')
+    assert.equal(scoped.auth, 'A')
   })
 
   checkAsync('Envoi : réseau inconnu → network_id vide (aucun réseau deviné)', async () => {

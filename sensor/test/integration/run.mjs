@@ -43,7 +43,7 @@ try {
   const cfg = await (await fetch('http://127.0.0.1:8799/config.js')).text()
   ok('interface servie par le capteur', !!home && home.status === 200 && (await home.text()).includes('<div id="root">'))
   ok('config.js : URL + clé anon, jamais le mot de passe', cfg.includes('anon-test') && !cfg.includes('MOT-DE-PASSE') && !cfg.includes('capteur@test'), cfg.trim())
-  const add = (row) => fetch('http://127.0.0.1:54399/__db', { method: 'POST', body: JSON.stringify({ table: 'sensor_commands', row: { sensor_id: s.id, status: 'pending', params: {}, ...row } }) })
+  const add = (row) => fetch('http://127.0.0.1:54399/__db', { method: 'POST', body: JSON.stringify({ table: 'sensor_commands', row: { sensor_id: s.id, user_id: 'u1', status: 'pending', params: {}, ...row } }) })
   await add({ kind: 'scan_now' })
   await add({ kind: 'block_ip', params: { ip: '192.168.50.99' } })
   await add({ kind: 'block_ip', params: { ip: '192.168.50.1' } })
