@@ -32,6 +32,7 @@ function Dashboard({ user }) {
   const srv = useRows('services', user)
   const net = useRows('networks', user)
   const sen = useRows('sensors', user)
+  const lnk = useRows('links', user)
   // Table sensors absente tant que schema_r1_results.sql n'est pas exécuté : pas une panne.
   const sensorsMissing = isMissingTableMessage(sen.error)
   // Demandes au capteur et adresses bloquées (supabase/schema_r4_actions.sql) : rafraîchies toutes les 5 s.
@@ -42,7 +43,7 @@ function Dashboard({ user }) {
   const [modal, setModal] = useState(null)
   const [page, setPage] = useState('home')
   const close = () => setModal(null)
-  const error = dev.error || vul.error || alr.error || thr.error || srv.error || net.error || (sensorsMissing ? '' : sen.error) || (r4Missing ? '' : (cmd.error || blk.error))
+  const error = dev.error || vul.error || alr.error || thr.error || srv.error || net.error || lnk.error || (sensorsMissing ? '' : sen.error) || (r4Missing ? '' : (cmd.error || blk.error))
   const connected = !error
   // Détache explicitement les appareils avant de supprimer un réseau : la suppression reste
   // sans effet destructif même si la contrainte FK réelle n'est pas « on delete set null ».
@@ -93,7 +94,7 @@ function Dashboard({ user }) {
             />
           </main>
         ) : page === 'topology' ? (
-          <TopologyPage devices={dev.rows} services={srv.rows} networks={net.rows} networksLoaded={net.loaded} loaded={dev.loaded} />
+          <TopologyPage devices={dev.rows} services={srv.rows} networks={net.rows} links={lnk.rows} networksLoaded={net.loaded} loaded={dev.loaded} />
         ) : page === 'vulns' ? (
           <main className="main wide">
             <VulnsPage vulns={vul.rows} devices={dev.rows} onAdd={vul.add} onUpdate={vul.update} onRemove={vul.remove}

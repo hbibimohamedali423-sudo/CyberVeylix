@@ -19,6 +19,9 @@ Base de données : exécuter dans l'ordre les scripts de `supabase/` (voir plus 
 - Depuis le tableau de bord : analyse immédiate, blocage / déblocage d'une adresse dans le pare-feu du PC du capteur
   (manuel ou automatique), correction des réglages dangereux de ce PC (SMBv1, RDP sans NLA, Telnet), journal de
   surveillance, rapport imprimable en PDF. Interface en 5 langues (fr, en, de, ar, it).
+- Topologie : vue d'ensemble par réseau, et « Branchements réels » (passerelle → switchs → ports → appareils, câble
+  ou Wi-Fi, constaté ou déduit avec sa preuve) quand le capteur lit les switchs en SNMP (lecture seule) ; inventaire
+  détaillé par type (caméras, téléphones, ordinateurs, imprimantes, objets connectés…) identifié automatiquement.
 - Toutes les valeurs affichées viennent des enregistrements de la base : rien n'est simulé.
 
 ## Vérifications

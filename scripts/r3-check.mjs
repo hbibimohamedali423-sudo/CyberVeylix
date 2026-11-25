@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { buildPhysical, groupByType } from '../src/lib/physical.js'
 import { fileURLToPath } from 'node:url'
 import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand, pickSensorFor, blockState, localFixOf, fixSensorFor, hostKey, buildTimeline, parseIpList } from '../src/lib/findings.js'
 
@@ -140,6 +141,31 @@ check('chaque table lue par le tableau de bord a une colonne created_at (scripts
     const added = new RegExp(`alter table public\\.${t} add column if not exists created_at\\b`).test(sql)
     assert.ok(inCreate || added, `table ${t} : colonne created_at absente des scripts SQL`)
   }
+})
+
+check('branchements réels : arbre passerelle → switchs → ports → appareils, Wi-Fi sous son point d\'accès', () => {
+  const d = (id, role, name, type = null) => ({ id, role, name, type })
+  const devices = [d('gw', 'gateway', 'Fortinet'), d('s1', 'switch', 'SW-CORE'), d('s2', 'switch', 'SW-ETAGE'), d('ap', 'access_point', 'AP-HALL'),
+    d('pr', 'printer', 'Imprimante', 'Imprimante'), d('cam', 'camera', 'Caméra', 'Caméra'), d('ph', 'phone', 'iPhone', 'Téléphone'), d('pc1', 'workstation', 'PC-1', 'Poste'),
+    d('pc10', 'workstation', 'PC-10', 'Poste'), d('lost', 'phone', 'Hors carte', 'Téléphone')]
+  const L = (from, to, fromPort, medium = 'ethernet', source = 'fdb', toPort = null) => ({ from_device_id: from, to_device_id: to, from_port: fromPort, to_port: toPort, medium, source, status: 'observed' })
+  const links = [L('s1', 'gw', 'Gi1/0/1'), L('s1', 's2', 'Gi1/0/2', 'ethernet', 'lldp', 'port 1'), L('s1', 'ap', 'Gi1/0/4', 'ethernet', 'lldp', 'eth0'),
+    L('s1', 'pr', 'Gi1/0/3'), L('s2', 'cam', 'port 5'), L('ap', 'ph', null, 'wifi'), L('s1', 'pc10', 'Gi1/0/10'), L('s1', 'pc1', 'Gi1/0/9'),
+    L('s1', 'inconnu', 'Gi1/0/7')] // lien vers un appareil supprimé : ignoré
+  const r = buildPhysical(devices, links)
+  assert.equal(r.roots.length, 1)
+  const root = r.roots[0]
+  assert.equal(root.device.id, 'gw') // la passerelle en tête
+  const s1 = root.children[0]
+  assert.deepEqual([s1.device.id, s1.via.parentPort, s1.via.port], ['s1', null, 'Gi1/0/1'])
+  assert.deepEqual(s1.children.map((c) => c.device.id), ['s2', 'ap'])
+  assert.deepEqual(s1.ports.map((p) => p.port), ['Gi1/0/3', 'Gi1/0/9', 'Gi1/0/10']) // ordre naturel des ports
+  const ap = s1.children.find((c) => c.device.id === 'ap')
+  assert.deepEqual([ap.ports[0].wifi, ap.ports[0].entries[0].device.id], [true, 'ph'])
+  assert.deepEqual(r.stats, { cable: 4, wifi: 1, unknown: 0 })
+  assert.deepEqual(r.unplaced.map((x) => x.id), ['lost'])
+  assert.equal(buildPhysical(devices, []).hasLinks, false)
+  assert.deepEqual(groupByType(devices).map((g) => [g.type, g.devices.length]).slice(0, 2), [['', 4], ['Poste', 2]])
 })
 
 console.log('')

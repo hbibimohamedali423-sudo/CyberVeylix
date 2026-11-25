@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import Topology from './Topology'
+import PhysicalTopology from './PhysicalTopology'
 import { useI18n } from '../i18n/context.js'
 
-export default function TopologyPage({ devices = [], services = [], networks = [], loaded = true, networksLoaded = true }) {
+export default function TopologyPage({ devices = [], services = [], networks = [], links = [], loaded = true, networksLoaded = true }) {
   const { t } = useI18n()
   const pageRef = useRef(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [error, setError] = useState(false)
   const [networkId, setNetworkId] = useState('')
+  const [view, setView] = useState('logical') // « logical » : vue d'ensemble ; « physical » : branchements réels
   const supported = typeof document !== 'undefined' && Boolean(document.fullscreenEnabled)
 
   useEffect(() => {
@@ -32,12 +34,17 @@ export default function TopologyPage({ devices = [], services = [], networks = [
   const title = supported ? label : t('topologyPage.fullscreenUnavailable')
   const visibleNetworks = networkId ? networks.filter((n) => n.id === networkId) : networks
   const visibleDevices = networkId ? devices.filter((d) => d.network_id === networkId) : devices
+  const visibleLinks = networkId ? links.filter((l) => l.network_id === networkId) : links
 
   return (
     <main className="main wide topology-page" ref={pageRef}>
       <div className="topology-page-bar">
         <h1 className="sr-only">{t('nav.topology')}</h1>
         <div className="topology-page-tools">
+          <div className="topology-view-switch" role="group" aria-label={t('physical.viewAria')}>
+            <button type="button" className={view === 'logical' ? 'on' : ''} aria-pressed={view === 'logical'} onClick={() => setView('logical')}>{t('physical.viewLogical')}</button>
+            <button type="button" className={view === 'physical' ? 'on' : ''} aria-pressed={view === 'physical'} onClick={() => setView('physical')}>{t('physical.viewPhysical')}</button>
+          </div>
           <label className="topology-net-select">
             <span>{t('topology.networkFilter')}</span>
             <select value={networkId} onChange={(e) => setNetworkId(e.target.value)}>
@@ -66,7 +73,9 @@ export default function TopologyPage({ devices = [], services = [], networks = [
       </div>
       {!supported && <p id="topology-fs-unavailable" className="topology-fs-note">{t('topologyPage.fullscreenUnavailable')}</p>}
       {error && <p className="topology-fs-error" role="alert">{t('topologyPage.fullscreenError')}</p>}
-      <Topology devices={visibleDevices} services={services} networks={visibleNetworks} loaded={loaded && networksLoaded} />
+      {view === 'physical'
+        ? <PhysicalTopology devices={visibleDevices} links={visibleLinks} />
+        : <Topology devices={visibleDevices} services={services} networks={visibleNetworks} loaded={loaded && networksLoaded} />}
     </main>
   )
 }
