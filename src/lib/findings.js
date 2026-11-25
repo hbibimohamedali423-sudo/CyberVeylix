@@ -93,3 +93,29 @@ export function parseIpList(text) {
   const ips = [...new Set(parts.filter((p) => IPV4.test(p)))]
   return { ips, invalid, tooMany: ips.length > 100 }
 }
+
+// Événements enregistrés par heure sur les `hours` dernières heures (le plus ancien d'abord), pour « Activité ».
+export function hourlyCounts(rows = [], now = Date.now(), hours = 24) {
+  const HOUR = 3600000
+  const end = Math.floor(now / HOUR) * HOUR + HOUR // fin de l'heure en cours
+  const start = end - hours * HOUR
+  const buckets = Array.from({ length: hours }, (_, i) => ({ at: start + i * HOUR, n: 0 }))
+  for (const r of rows) {
+    const ts = r && r.created_at ? Date.parse(r.created_at) : NaN
+    if (!Number.isFinite(ts) || ts < start || ts >= end) continue
+    buckets[Math.floor((ts - start) / HOUR)].n += 1
+  }
+  return buckets
+}
+
+// Recherche globale (barre du haut) : appareils, alertes, vulnérabilités ; 8 résultats au plus.
+export function searchAll({ devices = [], alerts = [], vulns = [] } = {}, query = '', limit = 8) {
+  const q = String(query).trim().toLowerCase()
+  if (q.length < 2) return []
+  const has = (...vals) => vals.some((v) => v !== null && v !== undefined && String(v).toLowerCase().includes(q))
+  const out = []
+  for (const d of devices) if (has(d.name, d.ip, d.mac, d.vendor, d.hostname)) out.push({ kind: 'device', id: d.id, label: d.name, sub: d.ip || d.mac || '' })
+  for (const a of alerts) if (has(a.title, a.source_ip, a.source_mac, a.detail)) out.push({ kind: 'alert', id: a.id, label: a.title, sub: a.source_ip || '' })
+  for (const v of vulns) if (has(v.title, ...(Array.isArray(v.cves) ? v.cves : []))) out.push({ kind: 'vuln', id: v.id, label: v.title, sub: (v.cves || [])[0] || '' })
+  return out.slice(0, limit)
+}

@@ -2,6 +2,7 @@ import { ALERT_SOURCES, ALERT_STATUS, CONFIDENCE, SEV, STATUS, TYPES, VULN_SOURC
 import { useI18n } from '../i18n/context.js'
 import { sensorState, sourceOf } from '../lib/findings.js'
 import { CveLinks } from './FindingBits.jsx'
+import { datasetCsv } from '../lib/exports.js'
 import './ReportPage.css'
 
 // Rapport imprimable (Imprimer → « Enregistrer au format PDF ») construit uniquement
@@ -10,7 +11,16 @@ const sevRank = (k) => { const i = SEV.findIndex((s) => s.k === k); return i < 0
 const time = (v) => { const n = v ? new Date(v).getTime() : NaN; return Number.isFinite(n) ? n : 0 }
 const MAX_ALERTS = 50
 
-export default function ReportPage({ email, devices = [], services = [], vulns = [], alerts = [], sensors = [], sensorsMissing }) {
+// Fichier téléchargé par le navigateur (aucun envoi ailleurs).
+const download = (filename, text) => {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url; a.download = filename
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export default function ReportPage({ email, devices = [], services = [], vulns = [], alerts = [], threats = [], sensors = [], sensorsMissing, onRecord }) {
   const { t, locale } = useI18n()
   const when = (v) => (v ? new Date(v).toLocaleString(locale) : '—')
   const label = (list, prefix, k) => (list.some((x) => (x.k ?? x) === k) ? t(`${prefix}.${k}`) : (k || '—'))
@@ -32,7 +42,16 @@ export default function ReportPage({ email, devices = [], services = [], vulns =
           <p className="m">{t('report.generated', { date: when(new Date().toISOString()) })}{email ? ` · ${email}` : ''}</p>
           <p className="m">{t('report.sourceNote')}</p>
         </div>
-        <button type="button" className="no-print" onClick={() => window.print()}>{t('report.print')}</button>
+        <button type="button" className="no-print" onClick={() => { onRecord?.({ kind: 'security', row_count: devices.length }); window.print() }}>{t('report.print')}</button>
+      </div>
+      <div className="report-exports no-print" role="group" aria-label={t('reportExtra.exportsAria')}>
+        {[['devices', devices], ['alerts', alerts], ['vulnerabilities', vulns], ['threats', threats]].map(([kind, rows]) => (
+          <button key={kind} type="button" onClick={() => {
+            const f = datasetCsv(kind, rows, { services })
+            download(f.filename, f.text)
+            onRecord?.({ kind, row_count: f.rowCount })
+          }}>{t('reportExtra.exportCsv', { what: t(`reportKind.${kind}`) })}</button>
+        ))}
       </div>
 
       <section>

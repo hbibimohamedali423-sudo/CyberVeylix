@@ -98,3 +98,16 @@ dialog{background:var(--dialog-bg);color:var(--t);border:1px solid var(--card-bo
 [data-theme="light"] .ov{backdrop-filter:blur(2px)}
 [data-theme="light"] .dl div{border-top-color:var(--border-soft)}
 [data-theme="light"] .dl div:hover{background:var(--row-hover)}
+.search-live{position:relative;align-items:center;gap:10px}
+.search-live input{flex:1;min-width:0;margin:0;padding:0;background:transparent;border:0;color:var(--t);font:inherit;outline:none}
+.search-live input::placeholder{color:var(--m)}
+.search-live:focus-within{outline:2px solid var(--focus-color);outline-offset:2px}
+.search-results{position:absolute;inset-inline:0;top:calc(100% + 6px);z-index:30;list-style:none;margin:0;padding:6px;background:var(--dialog-bg);border:1px solid var(--card-border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);display:grid;gap:2px}
+.search-results li{padding:7px 9px;border-radius:6px;cursor:pointer;color:var(--t);font-size:13px}
+.search-results li.on,.search-results li:hover{background:var(--surface2)}
+.search-results .search-kind{display:inline-block;min-width:92px;color:var(--accent-ink);font-size:11px}
+.activity-card .act-bar:hover path{opacity:.75}
+.report-exports{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
+.report-exports button{width:auto;margin:0;padding:6px 12px;background:var(--surface2);color:var(--t)}
+.right-reports{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:12px}
+.right-reports button{width:100%;margin:0;padding:6px 8px;text-align:start;background:transparent;color:var(--t);border:1px solid var(--border-soft);border-radius:6px}

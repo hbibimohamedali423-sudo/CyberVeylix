@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildPhysical, groupByType } from '../src/lib/physical.js'
 import { fileURLToPath } from 'node:url'
-import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand, pickSensorFor, blockState, localFixOf, fixSensorFor, hostKey, buildTimeline, parseIpList } from '../src/lib/findings.js'
+import { isCve, cveUrl, cvesOf, sourceOf, sensorState, SENSOR_STALE_MS, isMissingTableMessage, parseCommandResult, isActiveCommand, pickSensorFor, blockState, localFixOf, fixSensorFor, hostKey, buildTimeline, parseIpList, hourlyCounts, searchAll } from '../src/lib/findings.js'
 
 let passed = 0
 const failures = []
@@ -166,6 +166,26 @@ check('branchements réels : arbre passerelle → switchs → ports → appareil
   assert.deepEqual(r.unplaced.map((x) => x.id), ['lost'])
   assert.equal(buildPhysical(devices, []).hasLinks, false)
   assert.deepEqual(groupByType(devices).map((g) => [g.type, g.devices.length]).slice(0, 2), [['', 4], ['Poste', 2]])
+})
+
+check('activité : alertes enregistrées comptées par heure (24 h), hors fenêtre ignorées', () => {
+  const now = Date.parse('2026-11-25T12:30:00Z')
+  const b = hourlyCounts([{ created_at: '2026-11-25T12:05:00Z' }, { created_at: '2026-11-25T12:59:00Z' }, { created_at: '2026-11-25T11:00:00Z' },
+    { created_at: '2026-11-24T12:59:00Z' }, { created_at: '2026-11-24T13:00:00Z' }, { created_at: null }, {}], now)
+  assert.equal(b.length, 24)
+  assert.equal(b[23].n, 2) // heure en cours
+  assert.equal(b[22].n, 1)
+  assert.equal(b[0].n, 1) // 24-11 13:00 : première heure de la fenêtre ; 12:59 la veille : hors fenêtre
+  assert.equal(b.reduce((n, x) => n + x.n, 0), 4)
+})
+
+check('recherche : appareils, alertes, vulnérabilités ; 2 caractères minimum ; limite', () => {
+  const data = { devices: [{ id: 1, name: 'Caméra parking', ip: '10.15.3.7', vendor: 'Hikvision' }], alerts: [{ id: 2, title: 'Balayage', source_ip: '10.15.3.70' }], vulns: [{ id: 3, title: 'SMBv1', cves: ['CVE-2017-0144'] }] }
+  assert.deepEqual(searchAll(data, '10.15.3.7').map((r) => r.kind), ['device', 'alert'])
+  assert.deepEqual(searchAll(data, 'hikv').map((r) => r.id), [1])
+  assert.deepEqual(searchAll(data, 'cve-2017').map((r) => r.kind), ['vuln'])
+  assert.deepEqual(searchAll(data, 'a'), [])
+  assert.equal(searchAll({ devices: Array.from({ length: 20 }, (_, i) => ({ id: i, name: `PC-${i}` })) }, 'pc').length, 8)
 })
 
 console.log('')

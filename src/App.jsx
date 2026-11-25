@@ -33,6 +33,7 @@ function Dashboard({ user }) {
   const net = useRows('networks', user)
   const sen = useRows('sensors', user)
   const lnk = useRows('links', user)
+  const rep = useRows('reports', user)
   // Table sensors absente tant que schema_r1_results.sql n'est pas exécuté : pas une panne.
   const sensorsMissing = isMissingTableMessage(sen.error)
   // Demandes au capteur et adresses bloquées (supabase/schema_r4_actions.sql) : rafraîchies toutes les 5 s.
@@ -43,7 +44,7 @@ function Dashboard({ user }) {
   const [modal, setModal] = useState(null)
   const [page, setPage] = useState('home')
   const close = () => setModal(null)
-  const error = dev.error || vul.error || alr.error || thr.error || srv.error || net.error || lnk.error || (sensorsMissing ? '' : sen.error) || (r4Missing ? '' : (cmd.error || blk.error))
+  const error = dev.error || vul.error || alr.error || thr.error || srv.error || net.error || lnk.error || rep.error || (sensorsMissing ? '' : sen.error) || (r4Missing ? '' : (cmd.error || blk.error))
   const connected = !error
   // Détache explicitement les appareils avant de supprimer un réseau : la suppression reste
   // sans effet destructif même si la contrainte FK réelle n'est pas « on delete set null ».
@@ -61,7 +62,8 @@ function Dashboard({ user }) {
 
   return (
     <>
-      <Topbar email={user.email} onLogout={() => supabase.auth.signOut()} connected={connected} lastScan={lastScan} />
+      <Topbar email={user.email} onLogout={() => supabase.auth.signOut()} connected={connected} lastScan={lastScan}
+        searchData={{ devices: dev.rows, alerts: alr.rows, vulns: vul.rows }} onNavigate={setPage} />
       <div className={`wrap${page === 'topology' ? ' page-wide' : ''}`}>
         <Sidebar active={page} onChange={setPage} />
         {page === 'home' ? (<>
@@ -70,7 +72,7 @@ function Dashboard({ user }) {
           <SensorCard sensors={sen.rows} loaded={sen.loaded} missing={sensorsMissing} />
           <section className="mid">
             <TopologySummary devices={dev.rows} networks={net.rows} loaded={dev.loaded && net.loaded} lastScan={lastScan} onOpen={() => setPage('topology')} />
-            <Activity />
+            <Activity alerts={alr.rows} devices={dev.rows} />
           </section>
           <section className="bot">
             <DevicesCard devices={dev.rows} />
@@ -78,7 +80,7 @@ function Dashboard({ user }) {
             <ThreatsCard threats={thr.rows} />
           </section>
         </main>
-        <RightColumn alerts={alr.rows} threats={thr.rows} onAddAlert={() => setModal('alr')} onAddThreat={() => setModal('thr')} />
+        <RightColumn alerts={alr.rows} threats={thr.rows} reports={rep.rows} onOpenReports={() => setPage('reports')} onAddAlert={() => setModal('alr')} onAddThreat={() => setModal('thr')} />
         </>) : page === 'devices' ? (
           <main className="main wide">
             <DevicesPage
@@ -126,7 +128,7 @@ function Dashboard({ user }) {
         ) : page === 'reports' ? (
           <main className="main wide">
             <ReportPage email={user.email} devices={dev.rows} services={srv.rows} vulns={vul.rows}
-              alerts={alr.rows} sensors={sen.rows} sensorsMissing={sensorsMissing} />
+              alerts={alr.rows} threats={thr.rows} sensors={sen.rows} sensorsMissing={sensorsMissing} onRecord={(r) => rep.add(r)} />
           </main>
         ) : (
           <main className="main wide">
