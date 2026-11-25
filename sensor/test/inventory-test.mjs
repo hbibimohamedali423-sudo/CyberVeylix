@@ -88,6 +88,22 @@ export function inventoryChecks(check, checkAsync) {
     assert.deepEqual(t({ vendor: 'VMware' }), ['server', 'Serveur', 'probable'])
     assert.deepEqual(t({ hostname: 'NPI8A1B2C' }), ['printer', 'Imprimante', 'probable'])
     assert.deepEqual(t({}), [null, null, null])
+    // Fabricants réels vus sur un réseau d'entreprise, avec les noms COURTS produits par oui.mjs.
+    const o = createOui({ table: { '3CEF8C': 'Hangzhou Huacheng Network Technology Co.,Ltd', '805EC0': 'YEALINK(XIAMEN) NETWORK TECHNOLOGY CO.,LTD.',
+      F8A03D: 'Dinstar Technologies Co., Limited', '8C79F5': 'Samsung Electronics Co.,Ltd', ACCC8E: 'Axis Communications AB', '44650D': 'Amazon Technologies Inc.',
+      '00A0B0': 'SHARP Corporation', '0007DF': 'Zebra Technologies Inc.', '00E0FC': 'HUAWEI TECHNOLOGIES CO.,LTD' } })
+    const v = (mac) => o.vendorOf(mac)
+    assert.deepEqual(t({ vendor: v('3c:ef:8c:00:00:01') }), ['camera', 'Caméra', 'probable']) // Huacheng = Dahua / Imou
+    assert.deepEqual(t({ vendor: v('80:5e:c0:00:00:01') }), ['phone', 'Téléphone', 'probable']) // téléphone IP Yealink
+    assert.deepEqual(t({ vendor: v('f8:a0:3d:00:00:01') }), ['other', 'Équipement réseau', 'à vérifier']) // passerelle VoIP
+    assert.deepEqual(t({ vendor: v('8c:79:f5:00:00:01') }), ['phone', 'Téléphone', 'à vérifier']) // Samsung : téléphone ou TV
+    assert.deepEqual(t({ vendor: v('ac:cc:8e:00:00:01') }), ['camera', 'Caméra', 'probable'])
+    assert.deepEqual(t({ vendor: v('44:65:0d:00:00:01') }), ['iot', 'Objet connecté', 'à vérifier'])
+    assert.deepEqual(t({ vendor: v('00:a0:b0:00:00:01') })[0], 'printer')
+    assert.deepEqual(t({ vendor: v('00:07:df:00:00:01') })[0], 'printer')
+    assert.deepEqual(t({ vendor: v('00:e0:fc:00:00:01') })[0], 'other') // Huawei réseau (≠ Huawei Device)
+    assert.deepEqual(t({ vendor: 'TP-Link', hostname: 'TL-SG1428PE' }), ['switch', 'Équipement réseau', 'probable']) // switch nommé
+    assert.deepEqual(t({ vendor: 'TP-Link', hostname: 'EAP225-Hall' }), ['access_point', 'Équipement réseau', 'probable'])
     assert.ok(classify({ vendor: 'Seiko Epson' }).evidence.includes('fabricant Seiko Epson'))
   })
 

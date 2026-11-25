@@ -8,20 +8,22 @@ export const ROLE_TYPES = {
   workstation: 'Poste', camera: 'Caméra', printer: 'Imprimante', phone: 'Téléphone', iot: 'Objet connecté', other: null,
 }
 
-// Fabricants par famille (noms courts du registre IEEE). « strong » : le fabricant suffit à une identification probable.
+// Fabricants par famille. ATTENTION : comparés aux noms COURTS (oui.mjs retire « Electronics », « Technologies »,
+// « Communications », « Corporation »…) : « Samsung », « Axis », « Amazon », jamais « Samsung Electronics ». « strong » : le fabricant suffit à une identification probable.
 const VENDORS = [
-  { role: 'camera', strong: true, re: /hikvision|dahua|axis communications|uniview|reolink|hanwha|samsung techwin|vivotek|ezviz|tiandy|imou|amcrest|foscam|provision-isr|milesight|geovision|mobotix|bosch security/i },
-  { role: 'printer', strong: true, re: /seiko epson|epson|canon|brother|lexmark|ricoh|kyocera|xerox|konica minolta|sharp corporation|oki electric|oki data|zebra technologies|pantum|toshiba tec/i },
-  { role: 'network', strong: false, re: /cisco|meraki|aruba|juniper|tp-link|d-link|ubiquiti|mikrotik|routerboard|fortinet|ruckus|zyxel|netgear|cambium|extreme networks|sophos|ruijie|tenda|mercusys|edimax|allied telesis|hpe|hewlett packard enterprise|grandstream networks|teltonika|draytek|sagemcom|zte/i },
-  { role: 'phone', strong: false, re: /xiaomi|oppo|vivo mobile|oneplus|realme|motorola mobility|huawei device|honor device|transsion|tecno|infinix|itel|nothing technology|fairphone|hmd global|sony mobile|lg electronics \(mobile/i },
+  { role: 'camera', strong: true, re: /hikvision|dahua|huacheng|^axis\b|uniview|reolink|hanwha|samsung techwin|vivotek|ezviz|tiandy|imou|amcrest|foscam|provision-isr|milesight|geovision|mobotix|bosch security/i },
+  { role: 'printer', strong: true, re: /seiko epson|epson|canon|brother|lexmark|ricoh|kyocera|xerox|konica minolta|^sharp\b|oki electric|oki data|^zebra\b|pantum|toshiba tec/i },
+  { role: 'network', strong: false, re: /cisco|meraki|aruba|juniper|tp-link|d-link|ubiquiti|mikrotik|routerboard|fortinet|ruckus|zyxel|netgear|cambium|extreme networks|sophos|ruijie|tenda|mercusys|edimax|allied telesis|hpe|hewlett packard enterprise|dinstar|teltonika|draytek|sagemcom|zte/i },
+  { role: 'phone', strong: true, re: /yealink|fanvil|snom|polycom|^poly\b|grandstream|avaya|mitel|alcatel-lucent enterprise/i }, // téléphones IP de bureau
+  { role: 'phone', strong: false, re: /xiaomi|oppo|vivo mobile|oneplus|realme|motorola mobility|huawei device|honor device|transsion|tecno|infinix|itel|^nothing\b|fairphone|hmd global|sony mobile|lg electronics \(mobile/i },
   { role: 'workstation', strong: false, re: /dell|lenovo|asustek|acer|micro-star|gigabyte|intel corporate|liteon|lite-on|azurewave|hon hai|foxconn|quanta|compal|wistron|chicony|microsoft|framework computer|clevo/i },
   { role: 'server', strong: true, re: /vmware|parallels|xensource|nutanix|supermicro|super micro/i },
-  { role: 'iot', strong: false, re: /espressif|tuya|shelly|allterco|itead|raspberry pi|amazon technologies|sonos|roku|signify|philips lighting|google|nest labs|ring llc|ecobee|lifx|wiz connected|broadlink|hisense|tcl|vizio|chromecast/i },
+  { role: 'iot', strong: false, re: /espressif|tuya|shelly|allterco|itead|raspberry pi|amazon technologies|sonos|roku|signify|philips lighting|google|nest labs|^ring\b|^amazon\b|ecobee|lifx|wiz connected|broadlink|hisense|tcl|vizio|chromecast/i },
 ]
 const AMBIGUOUS = [
   { re: /^apple/i, roles: ['phone', 'workstation'] }, // iPhone / iPad / Mac
-  { re: /samsung electronics/i, roles: ['phone', 'iot'] }, // téléphone, TV, électroménager
-  { re: /huawei technologies/i, roles: ['network', 'phone'] },
+  { re: /^samsung/i, roles: ['phone', 'iot'] }, // téléphone, TV, électroménager
+  { re: /^huawei(?! device)/i, roles: ['network', 'network', 'phone'] }, // surtout du réseau (téléphones récents : « Huawei Device »)
   { re: /hewlett packard|hp inc/i, roles: ['printer', 'workstation'] },
 ]
 
@@ -31,8 +33,8 @@ const HOSTNAME = [
   { role: 'server', re: /^(srv|server|serveur|dc\d*|ad\d*|nas|esxi|proxmox|pve|vm-)|[-_](srv|server|nas)\d*$/i },
   { role: 'printer', re: /printer|imprimante|epson|canon|brother|^hp[a-f0-9]{6}|^npi[a-f0-9]{6}|laserjet|officejet|deskjet|lexmark|ricoh|kyocera|xerox|mfp/i },
   { role: 'camera', re: /^(cam|ipc|nvr|dvr)|camera|cam[-_]?\d|hikvision|dahua|reolink|ezviz/i },
-  { role: 'access_point', re: /^(ap|wap)[-_]|access.?point|unifi|^eap\d|aruba-?ap|^iap-|omada/i },
-  { role: 'switch', re: /^(sw|switch)[-_ ]?\d|switch/i },
+  { role: 'access_point', re: /^(ap|wap)[-_]|access.?point|unifi|^eap\d|aruba-?ap|^iap-|omada|^tl-wa\d|^cpe\d/i },
+  { role: 'switch', re: /^(sw|switch)[-_ ]?\d|switch|^tl-s[gfx]\d|jetstream|^(dgs|des|gs|sg|cbs|ws-c)-?\d/i },
   { role: 'iot', re: /esp[-_]?[0-9a-f]{4,}|tasmota|shelly|tuya|smart[-_ ]?(plug|tv)|chromecast|firetv|roku|sonos|echo[-_]|google-home|nest/i },
 ]
 
