@@ -155,12 +155,14 @@ export function createTopologySync({ db, snmp, config, oui = null, log = console
     }
     let linked = 0
     if (polled.length) {
+      // La lecture SNMP fournit la carte complète : elle remplace les liens fdb / lldp / cdp du réseau. La liaison
+      // entendue passivement (LLDP / CDP) n'est écrite par le capteur que lorsque le SNMP n'est PAS configuré.
       const del = await db.from('links').delete().eq('network_id', networkId).in('source', SOURCES)
       if (del.error) { log('⚠ Liens non mis à jour : ' + del.error.message); return { polled: polled.length, unreachable, created, updated, links: 0 } }
       for (let i = 0; i < rows.length; i += 200) {
-        const r = await db.from('links').insert(rows.slice(i, i + 200))
+        const r = await db.from('links').insert(rows.slice(i, i + 200)).select('id')
         if (r.error) log('⚠ Liens non enregistrés : ' + r.error.message)
-        else linked += Math.min(200, rows.length - i)
+        else linked += (r.data || []).length
       }
     }
     log(`Topologie (SNMP) : ${polled.length} équipement(s) lu(s), ${unreachable} sans réponse, ${created} appareil(s) ajouté(s), ${linked} lien(s).`)

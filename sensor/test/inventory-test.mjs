@@ -12,7 +12,7 @@ const TABLE = {
 }
 
 function fakeClient(tables = {}) {
-  const db = { networks: [], devices: [], services: [], ...tables }
+  const db = { networks: [], devices: [], services: [], links: [], ...tables }
   let seq = 0
   const query = (rows, apply) => {
     const f = []
@@ -30,6 +30,7 @@ function fakeClient(tables = {}) {
     from: (t) => ({
       select: () => query(db[t], (hit) => ({ data: hit.map((r) => ({ ...r })), error: null })),
       update: (patch) => query(db[t], (hit) => { hit.forEach((r) => Object.assign(r, patch)); return { error: null } }),
+      delete: () => query(db[t], (hit) => { const gone = new Set(hit); db[t] = db[t].filter((r) => !gone.has(r)); return { error: null } }),
       insert: (rows) => {
         const list = [].concat(rows).map((r) => ({ id: `${t}${++seq}`, ...r }))
         db[t].push(...list)
@@ -194,6 +195,42 @@ export function inventoryChecks(check, checkAsync) {
     const r = await inv.sync(CTX)
     assert.equal(r.offline, 1)
     assert.deepEqual(client.db.devices.map((d) => d.status), ['off', 'on', 'on'])
+  })
+
+  checkAsync('écoute LLDP passive : switch entendu créé, PC du capteur créé, liaison directe enregistrée', async () => {
+    const { client, inv } = mk()
+    inv.observeUplink({ source: 'lldp', chassisId: '00:1b:54:aa:bb:cc', senderMac: '00:1b:54:aa:bb:cc', sysName: 'SW-CORE', sysDescr: 'Cisco C2960X', mgmtIp: '10.15.0.2', portId: 'Gi1/0/7', caps: { bridge: true } }, NOW.getTime())
+    const r = await inv.syncUplinks({ networkId: 'n1', sensorMac: '3c:52:82:aa:bb:cc', sensorIp: '10.15.5.117' })
+    assert.deepEqual([r.switches, r.links], [1, 1])
+    const sw = client.db.devices.find((d) => d.mac === '00:1b:54:aa:bb:cc')
+    assert.deepEqual([sw.role, sw.type, sw.hostname, sw.ip], ['switch', 'Équipement réseau', 'SW-CORE', '10.15.0.2'])
+    const self = client.db.devices.find((d) => d.mac === '3c:52:82:aa:bb:cc')
+    assert.deepEqual([self.role, self.role_confidence], ['workstation', 'certaine'])
+    const link = client.db.links[0]
+    assert.deepEqual([link.from_device_id, link.to_device_id, link.from_port, link.medium, link.source, link.status], [sw.id, self.id, 'Gi1/0/7', 'ethernet', 'lldp', 'observed'])
+    // Relancé : pas de doublon (switch, PC ni liaison)
+    await inv.syncUplinks({ networkId: 'n1', sensorMac: '3c:52:82:aa:bb:cc', sensorIp: '10.15.5.117' })
+    assert.equal(client.db.devices.filter((d) => d.mac === '00:1b:54:aa:bb:cc').length, 1)
+    assert.equal(client.db.links.length, 1)
+  })
+
+  checkAsync('écoute LLDP : point d\'accès (capacité Wi-Fi) ; sans réseau ou sans voisin, rien', async () => {
+    const { client, inv } = mk()
+    inv.observeUplink({ source: 'cdp', chassisId: '94:b4:0f:00:00:0a', senderMac: '94:b4:0f:00:00:0a', sysName: 'AP-HALL', caps: { wlanAp: true, bridge: true }, portId: 'eth0' }, NOW.getTime())
+    await inv.syncUplinks({ networkId: 'n1', sensorMac: '3c:52:82:aa:bb:cc' })
+    assert.equal(client.db.devices.find((d) => d.mac === '94:b4:0f:00:00:0a').role, 'access_point')
+    assert.deepEqual(await inv.syncUplinks({ networkId: null, sensorMac: '3c:52:82:aa:bb:cc' }), { switches: 0, links: 0 })
+    const empty = mk()
+    assert.deepEqual(await empty.inv.syncUplinks({ networkId: 'n1', sensorMac: '3c:52:82:aa:bb:cc' }), { switches: 0, links: 0 })
+  })
+
+  checkAsync('écoute LLDP : avec SNMP actif (writeLinks=false), switch gardé mais aucune liaison passive', async () => {
+    const { client, inv } = mk()
+    inv.observeUplink({ source: 'lldp', chassisId: '00:1b:54:aa:bb:cc', senderMac: '00:1b:54:aa:bb:cc', sysName: 'SW-X', caps: { bridge: true }, portId: 'Gi1/0/1' }, NOW.getTime())
+    const r = await inv.syncUplinks({ networkId: 'n1', sensorMac: '3c:52:82:aa:bb:cc', writeLinks: false })
+    assert.deepEqual([r.switches, r.links], [1, 0])
+    assert.ok(client.db.devices.some((d) => d.hostname === 'SW-X'))
+    assert.equal(client.db.links.length, 0)
   })
 
   checkAsync('inventaire : sans réseau rien n\'est écrit ; ports relevés utilisés pour le type', async () => {

@@ -39,6 +39,7 @@ const usableMac = (mac) => MAC_RE.test(mac || '') && mac !== '00:00:00:00:00:00'
 export function createInventory({ client = null, oui, log = console.log, now = () => new Date() }) {
   let db = client
   const seen = new Map() // mac → { mac, ip, lastSeen, hostname, vendorClass }
+  const uplinks = new Map() // clé switch → voisin LLDP/CDP entendu (switch auquel CE PC est branché)
   let cidr = null
 
   function setSubnet(value) { cidr = value || null }
@@ -53,6 +54,16 @@ export function createInventory({ client = null, oui, log = console.log, now = (
     e.lastSeen = at
     seen.set(mac, e)
   }
+  // Voisin LLDP / CDP entendu passivement : le switch (ou point d'accès) auquel le PC du capteur est branché.
+  function observeUplink(n, at = now().getTime()) {
+    if (!n) return
+    const mac = MAC_RE.test(n.chassisId || '') ? n.chassisId : (usableMac(n.senderMac) ? n.senderMac : null)
+    const key = `${n.source}:${(n.sysName || mac || n.mgmtIp || '').toLowerCase()}`
+    if (!n.sysName && !mac && !n.mgmtIp) return
+    uplinks.set(key, { source: n.source, mac, sysName: n.sysName || null, sysDescr: n.sysDescr || null,
+      mgmtIp: n.mgmtIp && inCidr(n.mgmtIp, cidr || `${n.mgmtIp}/32`) ? n.mgmtIp : null, portId: n.portId || null, caps: n.caps || {}, at })
+  }
+
   function observeDhcp(d, at = now().getTime()) {
     if (!d || !usableMac(d.mac)) return
     observe(d.mac, d.ip, at)
@@ -174,7 +185,72 @@ export function createInventory({ client = null, oui, log = console.log, now = (
     return { inserted, updated, offline: offline.length }
   }
 
-  return { observe, observeDhcp, ensureNetwork, sync, setSubnet, setClient, size: () => seen.size, entries: () => [...seen.values()] }
+  // Écrit les switchs / points d'accès ENTENDUS (LLDP / CDP passif) et le lien « switch → PC du capteur ».
+  // Sans aucun identifiant : seul ce qu'ils diffusent eux-mêmes est enregistré. Choix manuels jamais écrasés.
+  async function syncUplinks(ctx) {
+    const { networkId, sensorMac, writeLinks = true } = ctx
+    if (!db || !networkId || !usableMac(sensorMac) || !uplinks.size) return { switches: 0, links: 0 }
+    const stamp = now().toISOString()
+    const res = await db.from('devices').select('id,name,ip,mac,type,role,role_evidence,role_confidence,hostname,model,discovery_source').eq('network_id', networkId)
+    if (res.error) { log('⚠ Écoute LLDP : ' + res.error.message); return { switches: 0, links: 0 } }
+    const devices = res.data || []
+    const byMac = new Map(devices.filter((d) => d.mac).map((d) => [String(d.mac).toLowerCase(), d]))
+    const byIp = new Map(devices.filter((d) => d.ip).map((d) => [d.ip, d]))
+    const find = (mac, ip) => (mac && byMac.get(mac)) || (ip && byIp.get(ip)) || null
+
+    // Appareil du PC du capteur : créé s'il manque (il ne s'observe pas lui-même par ARP).
+    let self = byMac.get(sensorMac)
+    if (!self) {
+      const row = { name: `Ce PC (capteur)`, mac: sensorMac, ip: ctx.sensorIp || null, status: 'on', last_seen: stamp, network_id: networkId,
+        discovery_source: 'sensor', role: 'workstation', type: 'Poste', role_confidence: 'certaine', role_evidence: MARK + 'ordinateur qui héberge le capteur' }
+      const r = await db.from('devices').insert(row).select('id')
+      if (r.error || !r.data || !r.data[0]) return { switches: 0, links: 0 }
+      self = { ...row, id: r.data[0].id }
+      byMac.set(sensorMac, self)
+    }
+
+    let switches = 0
+    const linkRows = []
+    for (const u of uplinks.values()) {
+      const role = u.caps.wlanAp ? 'access_point' : (u.caps.bridge || u.caps.router) ? 'switch' : 'other'
+      const type = role === 'access_point' || role === 'switch' ? 'Équipement réseau' : null
+      const evidence = `${u.source.toUpperCase()} (écoute passive) : ${u.sysName || u.mac || u.mgmtIp} annoncé sur le port du capteur`
+      let sw = find(u.mac, u.mgmtIp)
+      if (!sw) {
+        const row = { name: (u.sysName || (u.mgmtIp ? `Switch (${u.mgmtIp})` : `Switch ${String(u.mac || '').slice(-5)}`)).slice(0, 80),
+          mac: u.mac || null, ip: u.mgmtIp || null, status: 'on', last_seen: stamp, network_id: networkId, discovery_source: 'sensor',
+          hostname: u.sysName || null, model: u.sysDescr ? u.sysDescr.slice(0, 120) : null, role, type, role_confidence: 'certaine', role_evidence: MARK + evidence }
+        const r = await db.from('devices').insert(row).select('id')
+        if (r.error || !r.data || !r.data[0]) continue
+        sw = { ...row, id: r.data[0].id }
+        if (sw.mac) byMac.set(sw.mac, sw); if (sw.ip) byIp.set(sw.ip, sw)
+        switches += 1
+      } else {
+        const ours = !sw.role_evidence || String(sw.role_evidence).startsWith(MARK)
+        const patch = {}
+        if (u.mgmtIp && !sw.ip) patch.ip = u.mgmtIp
+        if (u.sysName && !sw.hostname) patch.hostname = u.sysName
+        if (u.sysDescr && !sw.model) patch.model = u.sysDescr.slice(0, 120)
+        if (ours && (sw.role !== role || sw.role_confidence !== 'certaine')) Object.assign(patch, { role, type: (!sw.type || sw.discovery_source !== 'agent') ? type : sw.type, role_confidence: 'certaine', role_evidence: MARK + evidence })
+        if (Object.keys(patch).length) { await db.from('devices').update(patch).eq('id', sw.id); Object.assign(sw, patch) }
+      }
+      if (sw.id !== self.id) {
+        linkRows.push({ network_id: networkId, from_device_id: sw.id, to_device_id: self.id, from_port: u.portId || null, to_port: null,
+          medium: 'ethernet', source: u.source, status: 'observed', evidence: evidence.slice(0, 500), observed_at: stamp, last_seen: stamp })
+      }
+    }
+    let links = 0
+    for (const row of writeLinks ? linkRows : []) {
+      // Idempotent : on remplace le lien passif précédent de ce switch vers ce PC.
+      await db.from('links').delete().eq('network_id', networkId).eq('from_device_id', row.from_device_id).eq('to_device_id', row.to_device_id).eq('source', row.source)
+      const r = await db.from('links').insert(row).select('id')
+      if (!r.error && r.data && r.data.length) links += 1
+    }
+    if (switches || links) log(`Écoute LLDP / CDP : ${switches} switch(s) ajouté(s), ${links} liaison(s) directe(s).`)
+    return { switches, links }
+  }
+
+  return { observe, observeDhcp, observeUplink, ensureNetwork, sync, syncUplinks, setSubnet, setClient, uplinkCount: () => uplinks.size, size: () => seen.size, entries: () => [...seen.values()] }
 }
 
 // Nom lisible tant que l'appareil n'a pas annoncé le sien : « Xiaomi (10.15.4.64) », « Appareil 54:8d (10.15.4.64) ».

@@ -104,6 +104,7 @@ export default function PhysicalTopology({ devices = [], links = [] }) {
         <div className="ph-notice" role="status">
           <b>{t('physical.noLinks')}</b>
           <p>{t('physical.noLinksHow')}</p>
+          <p className="m">{t('physical.noLinksPassive')}</p>
           <code dir="ltr">install.cmd -Reconfigure</code>
         </div>
       ) : (

@@ -7,7 +7,7 @@ import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startMock } from './mock-supabase.mjs'
-import { arpFrame, dhcpClientFrame } from '../frames.mjs'
+import { arpFrame, dhcpClientFrame, lldpFrame } from '../frames.mjs'
 import { startAgent } from '../snmp-live-test.mjs'
 const HERE = fileURLToPath(new URL('.', import.meta.url))
 const REPO = fileURLToPath(new URL('../../../', import.meta.url))
@@ -20,6 +20,7 @@ writeFileSync(`${SP}/it/test.env`, 'SUPABASE_URL=http://127.0.0.1:54399\nSUPABAS
 rmSync(`${SP}/it/data`, { recursive: true, force: true }); mkdirSync(`${SP}/it/data`, { recursive: true })
 // Trames « reçues » par la carte simulée : passerelle Fortinet, caméra Hikvision, téléphone Xiaomi (DHCP avec nom).
 const GW_MAC = '38:c0:ea:0d:59:2a'
+const ifaceMac = '3c:52:82:cc:dd:ee' // MAC du PC du capteur imposée pour ce test (carte simulée sans MAC)
 // Faux switch SNMP (vrai échange UDP) + snmp.json dans le dossier de données du capteur.
 const SNMP_SECRET = 'communaute-secrete-it'
 const agent = await startAgent({ community: SNMP_SECRET })
@@ -28,10 +29,12 @@ writeFileSync(`${SP}/it/frames.json`, JSON.stringify([
   arpFrame({ op: 2, senderMac: GW_MAC, senderIp: '192.168.50.1' }),
   arpFrame({ op: 1, senderMac: '44:19:b6:00:00:01', senderIp: '192.168.50.20' }),
   dhcpClientFrame({ type: 3, mac: 'd8:b0:53:13:54:8d', hostname: 'Redmi-Note-12', vendorClass: 'android-dhcp-14', requestedIp: '192.168.50.64' }),
+  // Écoute passive : le switch auquel le capteur est branché s'annonce (aucun identifiant requis).
+  lldpFrame({ src: '00:1b:54:00:00:01', chassisMac: '00:1b:54:00:00:01', portId: 'Gi1/0/9', sysName: 'SW-ACCUEIL', sysDescr: 'Cisco C2960X', mgmtIp: '192.168.50.2', bridge: true }),
 ].map((b) => b.toString('hex'))))
 const uiDir = `${REPO}/sensor/ui`; const hadUi = existsSync(uiDir)
 if (!hadUi) cpSync(`${REPO}/dist`, uiDir, { recursive: true })
-const proc = spawn(process.execPath, [`--env-file=${SP}/it/test.env`, `${REPO}/sensor/listener.mjs`, '--yes', '--push', '--ui', '--ui-port=8799', `--data-dir=${SP}/it/data`, '--learn-minutes=0', '--gateway=192.168.50.1', `--gateway-mac=${GW_MAC}`], { env: { ...process.env, NODE_PATH: join(HERE, 'stubmods'), CV_STUB_FRAMES: `${SP}/it/frames.json`, CV_TEST_INVENTORY_DELAY_MS: '1500', CV_TEST_TOPOLOGY_DELAY_MS: '2500' } })
+const proc = spawn(process.execPath, [`--env-file=${SP}/it/test.env`, `${REPO}/sensor/listener.mjs`, '--yes', '--push', '--ui', '--ui-port=8799', `--data-dir=${SP}/it/data`, '--learn-minutes=0', '--gateway=192.168.50.1', `--gateway-mac=${GW_MAC}`], { env: { ...process.env, NODE_PATH: join(HERE, 'stubmods'), CV_STUB_FRAMES: `${SP}/it/frames.json`, CV_TEST_INVENTORY_DELAY_MS: '1500', CV_TEST_TOPOLOGY_DELAY_MS: '2500', CV_TEST_SENSOR_MAC: ifaceMac } })
 let log = ''; proc.stdout.on('data', (d) => { log += d }); proc.stderr.on('data', (d) => { log += d })
 const results = []; const ok = (name, cond, extra = '') => { results.push([cond ? 'PASS' : 'FAIL', name, extra]) }
 try {
@@ -72,6 +75,12 @@ try {
   const sw = mock.db.devices.find((d) => d.discovery_source === 'snmp') || {}
   ok('switchs : équipement lu en SNMP réel et ajouté comme switch', sw.hostname === 'SW-TEST' && sw.role === 'switch' && sw.network_id === net.id, JSON.stringify(sw))
   ok('switchs : identifiants SNMP absents de la base et du journal', !JSON.stringify(mock.db).includes(SNMP_SECRET) && !log.includes(SNMP_SECRET))
+  for (let i = 0; i < 40 && !mock.db.devices.some((d) => d.hostname === 'SW-ACCUEIL'); i++) await sleep(250)
+  const heard = mock.db.devices.find((d) => d.hostname === 'SW-ACCUEIL') || {}
+  ok('écoute LLDP passive : switch entendu ajouté sans identifiant SNMP', heard.role === 'switch' && heard.ip === '192.168.50.2' && heard.discovery_source === 'sensor', JSON.stringify(heard))
+  // SNMP est configuré ici : il fournit la carte complète, donc la liaison passive n'est PAS écrite (pas de doublon).
+  const passiveLink = mock.db.links.find((l) => heard.id && l.from_device_id === heard.id && l.to_device_id === (mock.db.devices.find((d) => d.mac === ifaceMac) || {}).id)
+  ok('écoute LLDP passive : avec SNMP actif, pas de liaison passive en double', !passiveLink, JSON.stringify(passiveLink || null))
   ok('aucune erreur fatale dans le journal', !/✖|TypeError|ReferenceError|Unhandled/.test(log))
 } catch (e) {
   results.push(['FAIL', 'exception du test', String(e && e.message)])

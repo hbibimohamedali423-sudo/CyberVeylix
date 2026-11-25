@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArp } from './lib/parse-arp.mjs'
 import { parseDhcpServerReply, parseDhcpClientRequest } from './lib/parse-dhcp.mjs'
+import { parseLldp, parseCdp } from './lib/parse-lldp.mjs'
 import { createDetectors } from './lib/detectors.mjs'
 import { parseConfigText, resolveOptions, effectiveLearnMinutes } from './lib/options.mjs'
 import { createHoneypotMonitor } from './lib/honeypot-monitor.mjs'
@@ -62,7 +63,8 @@ const BASELINE_FILE = join(DATA, 'baseline.json')
 const EVENTS_FILE = join(DATA, 'events.jsonl')
 const EVENTS_MAX_BYTES = 20 * 1024 * 1024
 // ARP + DHCP (réponses des serveurs ET demandes des appareils : nom et système annoncés, pour l'inventaire).
-const FILTER = 'arp or (udp and (src port 67 or src port 68))'
+// ARP + DHCP + écoute passive de LLDP (ether 0x88cc) et CDP (vers 01:00:0c:cc:cc:cc) : le capteur n'émet rien.
+const FILTER = 'arp or (udp and (src port 67 or src port 68)) or ether proto 0x88cc or ether host 01:00:0c:cc:cc:cc'
 
 // --- Chargement de Npcap / libpcap ------------------------------------------
 let Cap
@@ -295,6 +297,7 @@ cap.on('packet', (nbytes) => {
   else {
     const dhcpReq = parseDhcpClientRequest(frame)
     if (dhcpReq) inventory.observeDhcp(dhcpReq, now)
+    else inventory.observeUplink(parseLldp(frame) || parseCdp(frame), now) // switch / point d'accès entendu
   }
   if (events.length) report(events)
 })
@@ -421,7 +424,8 @@ const ifaceInfo = (() => {
   const d = Cap.deviceList().find((x) => x.name === device)
   const a = d?.addresses.find((x) => x.addr === sensorIp && x.netmask)
   const fromOs = Object.values(networkInterfaces()).flat().find((x) => x && x.address === sensorIp)
-  return { cidr: cidrOf(sensorIp, (a && a.netmask) || (fromOs && fromOs.netmask)), mac: fromOs && fromOs.mac ? fromOs.mac.toLowerCase() : null }
+  const testMac = process.env.CV_TEST_SENSOR_MAC
+  return { cidr: cidrOf(sensorIp, (a && a.netmask) || (fromOs && fromOs.netmask)), mac: (fromOs && fromOs.mac ? fromOs.mac.toLowerCase() : null) || (testMac || null) }
 })()
 inventory.setSubnet(ifaceInfo.cidr)
 let inventoryRunning = false
@@ -435,6 +439,9 @@ async function inventoryOnce() {
     const gatewayMac = opts.gatewayMac || saved?.gatewayMac || null
     const networkId = await inventory.ensureNetwork({ gatewayMac, gatewayIp, name: config.client || null })
     await inventory.sync({ networkId, gatewayIp, gatewayMac, sensorMac: ifaceInfo.mac })
+    // Switchs entendus passivement (LLDP / CDP) : aucun identifiant requis.
+    // Liaison directe écrite seulement sans lecture SNMP (sinon le SNMP fournit déjà la carte complète).
+    await inventory.syncUplinks({ networkId, sensorMac: ifaceInfo.mac, sensorIp, writeLinks: !existsSync(SNMP_FILE) })
   } catch (e) {
     console.log('⚠ Inventaire : ' + e.message)
   } finally {

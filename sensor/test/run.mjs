@@ -20,6 +20,7 @@ import { snmpChecks } from './snmp-test.mjs'
 import { snmpLiveChecks } from './snmp-live-test.mjs'
 import { topoSyncChecks } from './topo-sync-test.mjs'
 import { notifyChecks } from './notify-test.mjs'
+import { lldpChecks } from './lldp-test.mjs'
 import { parseArp, ARP_REQUEST, ARP_REPLY } from '../lib/parse-arp.mjs'
 import { parseDhcpServerReply, DHCP_OFFER } from '../lib/parse-dhcp.mjs'
 import { createDetectors } from '../lib/detectors.mjs'
@@ -502,6 +503,7 @@ snmpChecks(check, checkAsync)
 snmpLiveChecks(check, checkAsync)
 topoSyncChecks(check, checkAsync)
 notifyChecks(check, checkAsync)
+lldpChecks(check)
 
 // --- Scripts Windows (installateur / désinstallateur) ------------------------
 const sensorFile = (name) => fileURLToPath(new URL(`../${name}`, import.meta.url))

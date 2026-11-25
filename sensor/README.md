@@ -86,6 +86,14 @@ Avec `--push`, le capteur inventorie son réseau toutes les 5 minutes (premier p
 - Limite : un PC seul ne voit pas sur quel port de switch ni sur quel point Wi-Fi chaque appareil est branché ;
   cela demande la lecture des switchs (SNMP, en lecture seule).
 
+## Écoute passive LLDP / CDP (sans aucun identifiant)
+Toujours active, sans configuration : le capteur **entend** (sans rien émettre) les trames LLDP (802.1AB) et CDP que
+le switch — ou le point d'accès — auquel il est branché diffuse sur son port. Il en déduit, **sans mot de passe ni
+autorisation préalable et sans toucher à l'équipement** : le nom du switch, son modèle, son adresse de gestion, et le
+port exact où le capteur est connecté (lien « switch → ce PC », constaté). C'est utile quand le client a perdu les
+accès SNMP. Limite : cela ne révèle que le switch du capteur, pas le port des autres appareils (cela, seul le SNMP
+le donne). Si le SNMP est configuré, il fournit la carte complète et cette liaison passive n'est pas dupliquée.
+
 ## Lecture des switchs et points Wi-Fi (SNMP, lecture seule)
 Facultatif. Avec `snmp.json` dans le dossier de données (créé par l'installateur, ou à la main), le capteur lit
 toutes les 15 minutes (et à chaque « Analyser maintenant ») les tables **standard** des équipements, communes à
