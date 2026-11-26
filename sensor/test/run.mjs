@@ -18,6 +18,7 @@ import { fixesChecks } from './fixes-test.mjs'
 import { inventoryChecks } from './inventory-test.mjs'
 import { snmpChecks } from './snmp-test.mjs'
 import { snmpLiveChecks } from './snmp-live-test.mjs'
+import { behaviorChecks, threatlistChecks } from './behavior-test.mjs'
 import { topoSyncChecks } from './topo-sync-test.mjs'
 import { notifyChecks } from './notify-test.mjs'
 import { lldpChecks } from './lldp-test.mjs'
@@ -501,6 +502,8 @@ fixesChecks(check, checkAsync)
 inventoryChecks(check, checkAsync)
 snmpChecks(check, checkAsync)
 snmpLiveChecks(check, checkAsync)
+threatlistChecks(check)
+behaviorChecks(check)
 topoSyncChecks(check, checkAsync)
 notifyChecks(check, checkAsync)
 lldpChecks(check)
