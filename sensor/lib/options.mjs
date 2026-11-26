@@ -130,6 +130,21 @@ export function resolveOptions(argv, config = {}) {
   if (initial.error) return { error: initial.error }
   opts.initialLearnMinutes = initial.value
 
+  // Pare-feu FortiGate en LECTURE SEULE (facultatif) : uniquement depuis le fichier de configuration
+  // écrit par l'installateur, jamais en ligne de commande (le jeton d'API ne doit apparaître ni dans
+  // l'historique du shell, ni dans la liste des processus).
+  opts.fortigate = null
+  if (config.fortigate && typeof config.fortigate === 'object') {
+    const fg = config.fortigate
+    if (!fg.host || typeof fg.host !== 'string') return { error: 'fortigate.host manquant dans la configuration.' }
+    if (!fg.token || typeof fg.token !== 'string') return { error: 'fortigate.token manquant dans la configuration.' }
+    const fgPort = bounded(fg.port, 'fortigate.port', 1, 65535)
+    if (fgPort.error) return { error: fgPort.error }
+    const fgPoll = bounded(fg.pollSeconds, 'fortigate.pollSeconds', 30, 86400)
+    if (fgPoll.error) return { error: fgPoll.error }
+    opts.fortigate = { host: fg.host, token: fg.token, port: fgPort.value || 443, pollSeconds: fgPoll.value || 300 }
+  }
+
   return { options: opts }
 }
 

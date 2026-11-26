@@ -17,6 +17,10 @@ ni routeur, ni switch, ni appareil.
 | Balayage de ports interne (leurres) | Critique | Un appareil sonde au moins 3 leurres en une minute : reconnaissance ou malware qui se propage |
 | Tentative d'intrusion sur un leurre | Critique | Identifiant envoyé à un faux Telnet, FTP ou portail web : attaque de mots de passe, botnet type Mirai |
 | Connexion à un service leurre | Haute | Un appareil se connecte à un service que personne n'a de raison d'utiliser |
+| Communication avec une adresse malveillante connue | Critique | Un appareil contacte une IP/un domaine présent dans la liste de menaces (`threat-feed.txt`) : possiblement infecté |
+| Balayage du réseau par un appareil | Haute | Un appareil contacte un grand nombre d'autres appareils en moins d'une minute : ver ou reconnaissance |
+| Balayage de ports d'un appareil | Moyenne | Un appareil sonde un grand nombre de ports d'une même cible en moins d'une minute |
+| Appareil au comportement inhabituel | Moyenne | Un appareil parle soudain à bien plus de pairs que son comportement habituel appris |
 
 ## Leurres (honeypot)
 Avec `--honeypot` (activé par défaut par l'installateur), le capteur ouvre sur l'adresse du PC des
@@ -115,6 +119,39 @@ authentification SHA et chiffrement AES, recommandé) **jamais** envoyés à la 
 Limites : un switch non géré ne peut pas être lu ; les points d'accès pilotés par un contrôleur qui « tunnelise »
 le trafic montrent leurs clients derrière le contrôleur ; l'association exacte d'un client Wi-Fi à un point
 d'accès sans LLDP n'est pas déterminable par les MIB standard.
+
+## Détection de comportement et liste de menaces
+Analyse, sans aucune action, « qui parle à qui » sur le réseau (voir le tableau ci-dessus : communication
+avec une adresse malveillante connue, balayage du réseau, balayage de ports, comportement inhabituel).
+Alimentée par :
+- les demandes ARP du réseau local (actif par défaut, visible uniquement dans le VLAN du capteur) ;
+- le pare-feu FortiGate en lecture seule (facultatif, voir ci-dessous : voit tous les VLAN).
+
+**Liste de menaces** (facultative) : placez un fichier `threat-feed.txt` dans le dossier de données (une
+entrée par ligne — IP, plage CIDR ou domaine, `#` pour commenter ; voir `threat-feed.example.txt`). Rechargé
+au démarrage du capteur.
+
+## Pare-feu FortiGate (lecture seule, facultatif)
+Avec `fortigate` dans `config.json` (jamais en ligne de commande : le jeton ne doit pas se retrouver dans
+l'historique du shell), le capteur interroge périodiquement l'API de surveillance FortiOS — uniquement des
+requêtes **GET**, jamais d'écriture :
+```json
+{ "fortigate": { "host": "192.168.1.254", "token": "…", "port": 443, "pollSeconds": 300 } }
+```
+`token` : clé d'API créée par l'administrateur réseau du client avec un **profil en lecture seule**.
+`port` (443 par défaut) et `pollSeconds` (300 par défaut, de 30 à 86400) sont facultatifs.
+
+Le capteur lit alors, sur **tous les VLAN** du pare-feu (pas seulement celui du capteur) :
+- les interfaces et VLAN configurés ;
+- les baux DHCP et la table ARP : inventaire complet, y compris les appareils que le capteur ne voit pas
+  en écoute directe ;
+- les sessions actives : alimentent la détection de comportement ci-dessus (balayage, adresse malveillante
+  connue) sur l'ensemble du réseau, pas seulement le VLAN local.
+
+Si un point de l'API échoue (droits insuffisants, type de pare-feu différent), les autres continuent ;
+l'erreur est journalisée. L'intégration a été construite et testée avec des réponses d'exemple ; les noms
+exacts des champs seront confirmés au premier essai sur un pare-feu réel et ajustés si besoin dans
+`lib/fortigate-parse.mjs`. Cisco (SNMP) suivra la même logique, voir la section SNMP ci-dessus.
 
 ## Alertes instantanées sur téléphone (Telegram)
 Facultatif. Avec `notify.json` dans le dossier de données (créé par l'installateur : jeton vérifié auprès de

@@ -19,6 +19,7 @@ import { inventoryChecks } from './inventory-test.mjs'
 import { snmpChecks } from './snmp-test.mjs'
 import { snmpLiveChecks } from './snmp-live-test.mjs'
 import { behaviorChecks, threatlistChecks } from './behavior-test.mjs'
+import { fortigateChecks } from './fortigate-test.mjs'
 import { topoSyncChecks } from './topo-sync-test.mjs'
 import { notifyChecks } from './notify-test.mjs'
 import { lldpChecks } from './lldp-test.mjs'
@@ -254,6 +255,22 @@ check('Options : leurres (désactivés par défaut, config, --no-honeypot, ports
   assert.deepEqual(resolveOptions([], { honeypotPorts: 23 }).options.honeypotPorts, [23])
   assert.match(resolveOptions(['--honeypot-ports=0,23'], {}).error, /honeypot-ports/)
   assert.match(resolveOptions(['--honeypot-allow=pas-une-ip'], {}).error, /honeypot-allow/)
+})
+
+check('Options : pare-feu FortiGate (lecture seule, fichier de configuration uniquement)', () => {
+  assert.equal(resolveOptions([], {}).options.fortigate, null) // désactivé par défaut
+  const cfg = { fortigate: { host: '192.168.1.254', token: 'SECRET', port: 8443, pollSeconds: 60 } }
+  const o = resolveOptions([], cfg).options
+  assert.deepEqual(o.fortigate, { host: '192.168.1.254', token: 'SECRET', port: 8443, pollSeconds: 60 })
+  // Valeurs par défaut (port 443, interrogation toutes les 5 min) si non précisées.
+  const d = resolveOptions([], { fortigate: { host: 'h', token: 't' } }).options.fortigate
+  assert.equal(d.port, 443)
+  assert.equal(d.pollSeconds, 300)
+  assert.match(resolveOptions([], { fortigate: { token: 't' } }).error, /fortigate\.host/)
+  assert.match(resolveOptions([], { fortigate: { host: 'h' } }).error, /fortigate\.token/)
+  assert.match(resolveOptions([], { fortigate: { host: 'h', token: 't', pollSeconds: 5 } }).error, /fortigate\.pollSeconds/)
+  // Jamais en ligne de commande : le jeton ne doit pas pouvoir apparaître dans l'historique du shell.
+  assert.equal(resolveOptions(['--fortigate-token=x'], {}).options.fortigate, null)
 })
 
 check('Options : valeurs invalides refusées', () => {
@@ -504,6 +521,7 @@ snmpChecks(check, checkAsync)
 snmpLiveChecks(check, checkAsync)
 threatlistChecks(check)
 behaviorChecks(check)
+fortigateChecks(check, checkAsync)
 topoSyncChecks(check, checkAsync)
 notifyChecks(check, checkAsync)
 lldpChecks(check)

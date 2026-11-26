@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url'
 import { parseArp, ARP_REQUEST } from './lib/parse-arp.mjs'
 import { createBehaviorEngine } from './lib/behavior.mjs'
 import { createThreatList, parseThreatFeed } from './lib/threatlist.mjs'
+import { createFortigateClient } from './lib/fortigate.mjs'
+import { applyFortigate } from './lib/fortigate-sync.mjs'
 import { parseDhcpServerReply, parseDhcpClientRequest } from './lib/parse-dhcp.mjs'
 import { parseLldp, parseCdp } from './lib/parse-lldp.mjs'
 import { createDetectors } from './lib/detectors.mjs'
@@ -418,6 +420,28 @@ if (learnMinutes > 0) {
 } else {
   console.log('Surveillance active.')
   startVulnSchedule()
+}
+
+// Pare-feu FortiGate en LECTURE SEULE (facultatif, activé uniquement par fortigate.{host,token}
+// dans le fichier de configuration — jamais en ligne de commande). Interroge périodiquement les
+// VLAN, baux DHCP, table ARP et sessions actives : voit tout le réseau, pas seulement le VLAN du
+// capteur. N'envoie que des requêtes GET ; ne modifie jamais la configuration du pare-feu.
+if (opts.fortigate) {
+  const fg = createFortigateClient(opts.fortigate)
+  console.log(`Pare-feu FortiGate (lecture seule) : ${opts.fortigate.host}, interrogation toutes les ${opts.fortigate.pollSeconds} s.`)
+  const pollFortigate = async () => {
+    try {
+      const poll = await fg.poll()
+      const r = applyFortigate(poll, { behavior, inventory, now: Date.now() })
+      if (r.events.length) report(r.events)
+      const errs = Object.entries(poll.errors || {})
+      console.log(`Pare-feu : ${r.deviceCount} appareil(s), ${r.vlanCount} VLAN, ${r.sessionCount} session(s)${errs.length ? ` (${errs.map(([k, m]) => `${k} : ${m}`).join(', ')})` : ''}.`)
+    } catch (e) {
+      console.log(`⚠ Pare-feu FortiGate injoignable : ${e && e.message}.`)
+    }
+  }
+  pollFortigate()
+  setInterval(pollFortigate, opts.fortigate.pollSeconds * 1000).unref()
 }
 
 // Sauvegarde périodique de la référence. Les appareils déjà signalés y entrent aussi :
