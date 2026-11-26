@@ -9,7 +9,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 // que la pupille suit. Purement visuel : aucune donnée n'est lue ni affichée.
 // Chargée à part (React.lazy) pour ne pas alourdir le reste de l'application.
 
-const SKY = 0x39d5ff
+const SKY = 0x33e6f5
 const RED = 0xff4d5e
 const RX = 5.4
 const RZ = 2.6
