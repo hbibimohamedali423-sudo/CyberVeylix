@@ -17,7 +17,9 @@ const R1_ALERT_COLUMNS = ['source', 'kind']
 const R4_ALERT_COLUMNS = ['source_ip', 'source_mac']
 // L'adresse IP n'identifie le fautif que pour ces événements. Pour une usurpation de passerelle ou ARP,
 // l'IP annoncée est celle de la VICTIME imitée : seule la MAC (source_mac) désigne l'appareil à chercher.
-export const IP_IDENTIFIES_OFFENDER = new Set(['honeypot_touch', 'honeypot_scan', 'honeypot_login', 'rogue_dhcp', 'new_device'])
+export const IP_IDENTIFIES_OFFENDER = new Set(['honeypot_touch', 'honeypot_scan', 'honeypot_login', 'rogue_dhcp', 'new_device',
+  // Détection de comportement (behavior.mjs) : l'IP source EST l'appareil fautif.
+  'malware_c2', 'lateral_scan', 'port_scan', 'anomaly_fanout'])
 const R1_VULN_COLUMNS = ['source', 'finding_key', 'cves', 'evidence', 'remediation', 'confidence', 'port', 'service', 'network_id', 'last_seen']
 const R1_SERVICE_COLUMNS = ['version', 'last_seen']
 

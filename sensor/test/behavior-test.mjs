@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { createThreatList, parseThreatFeed, parseCidr, ipToInt } from '../lib/threatlist.mjs'
 import { createBehaviorEngine } from '../lib/behavior.mjs'
+import { IP_IDENTIFIES_OFFENDER } from '../lib/push.mjs'
 
 export function threatlistChecks(check) {
   check('threatlist : ipToInt et parseCidr', () => {
@@ -43,6 +44,12 @@ export function threatlistChecks(check) {
 }
 
 export function behaviorChecks(check) {
+  check('comportement : les types émis identifient le fautif par son IP (mapping push)', () => {
+    for (const type of ['malware_c2', 'lateral_scan', 'port_scan', 'anomaly_fanout']) {
+      assert.ok(IP_IDENTIFIES_OFFENDER.has(type), type)
+    }
+  })
+
   const T0 = Date.parse('2026-11-26T12:00:00Z')
   const run = (engine, flows) => { const out = []; for (const f of flows) out.push(...engine.observe(f, f.ts)); return out }
 

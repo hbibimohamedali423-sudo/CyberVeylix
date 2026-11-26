@@ -15,7 +15,9 @@ import { hostname, networkInterfaces } from 'node:os'
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, rmSync, statSync, renameSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseArp } from './lib/parse-arp.mjs'
+import { parseArp, ARP_REQUEST } from './lib/parse-arp.mjs'
+import { createBehaviorEngine } from './lib/behavior.mjs'
+import { createThreatList, parseThreatFeed } from './lib/threatlist.mjs'
 import { parseDhcpServerReply, parseDhcpClientRequest } from './lib/parse-dhcp.mjs'
 import { parseLldp, parseCdp } from './lib/parse-lldp.mjs'
 import { createDetectors } from './lib/detectors.mjs'
@@ -61,6 +63,8 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const DATA = opts.dataDir || join(HERE, 'data')
 const BASELINE_FILE = join(DATA, 'baseline.json')
 const EVENTS_FILE = join(DATA, 'events.jsonl')
+// Liste locale d'indicateurs malveillants (IP, plages, domaines), mise à jour par le client. Facultative.
+const THREAT_FEED = opts.threatFeed || process.env.THREAT_FEED || join(DATA, 'threat-feed.txt')
 const EVENTS_MAX_BYTES = 20 * 1024 * 1024
 // ARP + DHCP (réponses des serveurs ET demandes des appareils : nom et système annoncés, pour l'inventaire).
 // ARP + DHCP + écoute passive de LLDP (ether 0x88cc) et CDP (vers 01:00:0c:cc:cc:cc) : le capteur n'émet rien.
@@ -142,6 +146,17 @@ const detectors = createDetectors({
   trustedDhcpServers: saved?.trustedDhcpServers || [],
   bindings: saved?.bindings || [],
 })
+
+// Détection de comportement : balayage du réseau, communication avec une adresse malveillante connue,
+// comportement inhabituel. Alimentée par les demandes ARP du réseau local (ci-dessous) ; d'autres
+// sources (pare-feu en lecture seule) viendront ensuite. En apprentissage, elle n'alerte pas.
+let threatEntries = []
+if (existsSync(THREAT_FEED)) {
+  try { threatEntries = parseThreatFeed(readFileSync(THREAT_FEED, 'utf8')) }
+  catch { console.log('⚠ threat-feed.txt illisible : liste de menaces ignorée.') }
+}
+const behavior = createBehaviorEngine({ alert: learnMinutes === 0, threatList: createThreatList(threatEntries) })
+if (threatEntries.length) console.log(`Liste de menaces chargée : ${threatEntries.length} indicateur(s).`)
 
 // Inventaire (lib/inventory.mjs) : créé AVANT la capture, connecté à la base plus tard (setClient).
 const oui = createOui()
@@ -292,6 +307,12 @@ cap.on('packet', (nbytes) => {
     ...detectors.onArp(arp, now),
     ...detectors.onDhcp(parseDhcpServerReply(frame), now),
   ]
+  // Balayage du réseau local : une demande ARP révèle quel appareil cherche quelle adresse.
+  // On ignore la passerelle et le capteur lui-même (qui contactent légitimement beaucoup d'hôtes).
+  if (arp && arp.op === ARP_REQUEST && arp.senderIp !== '0.0.0.0' && arp.targetIp
+      && arp.senderIp !== gatewayIp && arp.senderIp !== sensorIp) {
+    events.push(...behavior.observe({ src: arp.senderIp, dst: arp.targetIp, internal: true, ts: now }, now))
+  }
   // Inventaire : l'émetteur réel d'une trame ARP cohérente (pas une usurpation) et les demandes DHCP.
   if (arp && arp.senderMac === arp.ethSrcMac) inventory.observe(arp.senderMac, arp.senderIp, now)
   else {
