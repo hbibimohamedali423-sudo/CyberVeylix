@@ -18,6 +18,7 @@
   --promo-bg:linear-gradient(160deg,#14343D,#0D1F25)}
 
 /* Fond : quadrillage fin + lignes marquées, halos doux, vignette. */
+:root:not([data-theme="light"]){background:#0A181D}
 :root:not([data-theme="light"]) body{background:var(--page-bg);background-attachment:fixed;font-family:"Saira",system-ui,-apple-system,"Segoe UI",sans-serif}
 :root:not([data-theme="light"]) body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:
@@ -30,6 +31,8 @@
 
 /* Titres de section : capitales étroites, comme les en-têtes du modèle. */
 :root:not([data-theme="light"]) h3{font:400 19px/1.1 "Saira Condensed","Saira",sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#E9F7F9}
+:root:not([data-theme="light"]) .main h2,:root:not([data-theme="light"]) .main h1{font-family:"Saira Condensed","Saira",sans-serif;font-weight:400;letter-spacing:.04em;text-transform:uppercase;color:#E9F7F9}
+:root:not([data-theme="light"]) .main h4{font:400 15px/1.2 "Saira Condensed","Saira",sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#7FE9F4}
 :root:not([data-theme="light"]) small,:root:not([data-theme="light"]) .m{font-family:"Share Tech Mono",ui-monospace,monospace;letter-spacing:.04em}
 
 /* Panneaux : angles nets, trait cyan à gauche du titre et coin de visée en haut à droite. */
@@ -72,5 +75,5 @@
 :root:not([data-theme="light"]) footer{font:400 10.5px "Share Tech Mono",ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;backdrop-filter:blur(4px)}
 
 /* Arabe : pas de capitales ni d'espacement des lettres (les liaisons doivent rester). */
-:root:lang(ar):not([data-theme="light"]) h3,:root:lang(ar):not([data-theme="light"]) nav button,:root:lang(ar):not([data-theme="light"]) thead th,:root:lang(ar):not([data-theme="light"]) footer,:root:lang(ar):not([data-theme="light"]) small,:root:lang(ar):not([data-theme="light"]) .m,:root:lang(ar):not([data-theme="light"]) .banner h1,:root:lang(ar):not([data-theme="light"]) button{letter-spacing:0;font-family:"Saira",system-ui,sans-serif}
+:root:lang(ar):not([data-theme="light"]) h3,:root:lang(ar):not([data-theme="light"]) .main h4,:root:lang(ar):not([data-theme="light"]) .main h2,:root:lang(ar):not([data-theme="light"]) .main h1,:root:lang(ar):not([data-theme="light"]) nav button,:root:lang(ar):not([data-theme="light"]) thead th,:root:lang(ar):not([data-theme="light"]) footer,:root:lang(ar):not([data-theme="light"]) small,:root:lang(ar):not([data-theme="light"]) .m,:root:lang(ar):not([data-theme="light"]) .banner h1,:root:lang(ar):not([data-theme="light"]) button{letter-spacing:0;font-family:"Saira",system-ui,sans-serif}
 :root:lang(ar):not([data-theme="light"]) nav button{font-size:14px}

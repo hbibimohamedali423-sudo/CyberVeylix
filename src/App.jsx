@@ -3,12 +3,10 @@ import { supabase, configured } from './supabaseClient'
 import useRows from './useRows'
 import Topbar from './components/Topbar'
 import Sidebar from './components/Sidebar'
-import RightColumn from './components/RightColumn'
 import Modal from './components/Modal'
 import Login from './components/Login'
-import { Kpis, Activity, DevicesCard, VulnCard, ThreatsCard } from './components/Panels'
+import HudDashboard from './components/HudDashboard'
 import TopologyPage from './components/TopologyPage'
-import TopologySummary from './components/TopologySummary'
 import DevicesPage from './components/DevicesPage'
 import AlertsPage from './components/AlertsPage'
 import VulnsPage from './components/VulnsPage'
@@ -64,24 +62,16 @@ function Dashboard({ user }) {
     <>
       <Topbar email={user.email} onLogout={() => supabase.auth.signOut()} connected={connected} lastScan={lastScan}
         searchData={{ devices: dev.rows, alerts: alr.rows, vulns: vul.rows }} onNavigate={setPage} />
-      <div className={`wrap${page === 'topology' ? ' page-wide' : ''}`}>
+      <div className={`wrap${page === 'topology' || page === 'home' ? ' page-wide' : ''}`}>
         <Sidebar active={page} onChange={setPage} />
-        {page === 'home' ? (<>
-        <main className="main">
-          <Kpis counts={[dev.loaded ? dev.rows.length : null, thr.loaded ? thr.rows.filter((t) => t.blocked).length : null, vul.loaded ? vul.rows.filter((v) => (v.status || 'open') !== 'resolved').length : null, srv.loaded ? srv.rows.length : null]} />
-          <SensorCard sensors={sen.rows} loaded={sen.loaded} missing={sensorsMissing} />
-          <section className="mid">
-            <TopologySummary devices={dev.rows} networks={net.rows} loaded={dev.loaded && net.loaded} lastScan={lastScan} onOpen={() => setPage('topology')} />
-            <Activity alerts={alr.rows} devices={dev.rows} />
-          </section>
-          <section className="bot">
-            <DevicesCard devices={dev.rows} />
-            <VulnCard vulns={vul.rows} onAdd={() => setPage('vulns')} />
-            <ThreatsCard threats={thr.rows} />
-          </section>
+        {page === 'home' ? (
+        <main className="main wide">
+          <HudDashboard devices={dev.rows} vulns={vul.rows} alerts={alr.rows} threats={thr.rows} services={srv.rows}
+            networks={net.rows} sensors={sen.rows} blocked={r4Missing ? [] : blk.rows} sensorsMissing={sensorsMissing}
+            onOpen={setPage} onAckAlert={(a) => alr.update(a.id, { status: 'ack', acknowledged_at: new Date().toISOString() })}
+            onAddAlert={() => setModal('alr')} onAddThreat={() => setModal('thr')} />
         </main>
-        <RightColumn alerts={alr.rows} threats={thr.rows} reports={rep.rows} onOpenReports={() => setPage('reports')} onAddAlert={() => setModal('alr')} onAddThreat={() => setModal('thr')} />
-        </>) : page === 'devices' ? (
+        ) : page === 'devices' ? (
           <main className="main wide">
             <DevicesPage
               devices={dev.rows}
