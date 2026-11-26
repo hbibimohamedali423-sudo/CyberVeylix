@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { parseArp, ARP_REQUEST } from './lib/parse-arp.mjs'
 import { createBehaviorEngine } from './lib/behavior.mjs'
 import { createThreatList, parseThreatFeed } from './lib/threatlist.mjs'
+import { createCiscoBehavior } from './lib/cisco-behavior.mjs'
 import { createFortigateClient } from './lib/fortigate.mjs'
 import { applyFortigate } from './lib/fortigate-sync.mjs'
 import { parseDhcpServerReply, parseDhcpClientRequest } from './lib/parse-dhcp.mjs'
@@ -158,6 +159,10 @@ if (existsSync(THREAT_FEED)) {
   catch { console.log('⚠ threat-feed.txt illisible : liste de menaces ignorée.') }
 }
 const behavior = createBehaviorEngine({ alert: learnMinutes === 0, threatList: createThreatList(threatEntries) })
+// Détection réseau-large sur les switchs lus en SNMP (voir cisco-behavior.mjs) : une adresse MAC apprise par
+// plusieurs switchs à la fois n'est jamais normale pour un appareil final. N'a d'effet que si snmp.json existe
+// (lecture des switchs activée) ; voir topologyOnce() plus bas.
+const ciscoBehavior = createCiscoBehavior()
 if (threatEntries.length) console.log(`Liste de menaces chargée : ${threatEntries.length} indicateur(s).`)
 
 // Inventaire (lib/inventory.mjs) : créé AVANT la capture, connecté à la base plus tard (setClient).
@@ -515,15 +520,18 @@ async function topologyOnce() {
       if (parsed.error) { topoSync = null; console.log('⚠ Lecture des switchs désactivée : ' + parsed.error); return }
       const p = await pusher()
       if (!p) return
-      topoSync = createTopologySync({ db: p.client, snmp: createSnmpClient(), config: parsed.config, oui })
+      topoSync = createTopologySync({ db: p.client, snmp: createSnmpClient(), config: parsed.config, oui, ciscoBehavior })
       console.log(`Lecture des switchs (SNMP) : ${parsed.config.credentials.length} identifiant(s), ${parsed.config.targets.length} équipement(s) listé(s), découverte ${parsed.config.auto ? 'automatique' : 'désactivée'}.`)
     }
     if (!topoSync) return
     const p = await pusher()
     if (!p) return
     inventory.setClient(p.client)
-    const networkId = await inventory.ensureNetwork({ gatewayMac: opts.gatewayMac || saved?.gatewayMac || null, gatewayIp, name: config.client || null })
-    await topoSync.run({ networkId, gatewayIp })
+    // Verrouillée (configurée ou apprise), sinon apprise en direct par le capteur sur ce même PC.
+    const gatewayMac = opts.gatewayMac || saved?.gatewayMac || (gatewayIp && detectors.macOf(gatewayIp)) || null
+    const networkId = await inventory.ensureNetwork({ gatewayMac, gatewayIp, name: config.client || null })
+    const r = await topoSync.run({ networkId, gatewayIp, gatewayMac })
+    if (r?.events?.length) report(r.events)
   } catch (e) {
     console.log('⚠ Lecture des switchs : ' + e.message)
   } finally {

@@ -21,6 +21,8 @@ ni routeur, ni switch, ni appareil.
 | Balayage du réseau par un appareil | Haute | Un appareil contacte un grand nombre d'autres appareils en moins d'une minute : ver ou reconnaissance |
 | Balayage de ports d'un appareil | Moyenne | Un appareil sonde un grand nombre de ports d'une même cible en moins d'une minute |
 | Appareil au comportement inhabituel | Moyenne | Un appareil parle soudain à bien plus de pairs que son comportement habituel appris |
+| Adresse de la passerelle vue à plusieurs endroits du réseau | Critique | La MAC de la passerelle est apprise au même moment par plusieurs switchs lus en SNMP : usurpation probable ailleurs sur le réseau |
+| Une adresse réseau vue à plusieurs endroits à la fois | Haute | Une même adresse MAC est apprise au même moment par plusieurs switchs lus en SNMP : clonage ou usurpation probable (voir limite ci-dessous) |
 
 ## Leurres (honeypot)
 Avec `--honeypot` (activé par défaut par l'installateur), le capteur ouvre sur l'adresse du PC des
@@ -119,6 +121,24 @@ authentification SHA et chiffrement AES, recommandé) **jamais** envoyés à la 
 Limites : un switch non géré ne peut pas être lu ; les points d'accès pilotés par un contrôleur qui « tunnelise »
 le trafic montrent leurs clients derrière le contrôleur ; l'association exacte d'un client Wi-Fi à un point
 d'accès sans LLDP n'est pas déterminable par les MIB standard.
+
+### Détection réseau-large (adresse vue à plusieurs endroits)
+Avec la lecture SNMP activée (ci-dessus), le capteur compare, à chaque passage, pour chaque adresse MAC vue
+comme appareil final (jamais un switch, jamais une liaison entre switchs — déjà écartées), les switchs qui
+l'ont apprise. Un appareil n'est physiquement branché qu'à un seul endroit à la fois : la même adresse apprise
+par **plusieurs switchs en même temps** n'est jamais normale (clonage ou usurpation d'adresse MAC), et c'est
+**critique** si l'adresse dupliquée est celle de la passerelle (usurpation du routeur, ailleurs sur le réseau).
+
+**Ce que ça n'est pas** : contrairement à la détection de comportement ci-dessous (sessions du pare-feu), les
+switchs ne savent pas « qui parle à qui », seulement « quelle adresse est apprise où ». Le capteur n'invente
+donc pas de balayage ni de communication malveillante à partir des switchs seuls — uniquement ce doublon de
+localisation, le seul signal que les tables MAC standard permettent honnêtement d'affirmer.
+
+**Limite assumée** : peut aussi se produire lors d'une reconvergence réseau transitoire (bascule de lien,
+redémarrage d'un switch) ou d'un transfert d'adresse virtuelle (cluster, VRRP/HSRP) non reconnu comme tel : à
+vérifier avant de considérer l'alerte comme certaine. Pour voir aussi la communication malveillante et le
+balayage sur les Cisco (comme sur FortiGate ci-dessus), il faudrait une vraie source de trafic — NetFlow/IPFIX
+exporté par l'équipement, ou un port miroir (SPAN) vers le capteur — aucune des deux n'est lue aujourd'hui.
 
 ## Détection de comportement et liste de menaces
 Analyse, sans aucune action, « qui parle à qui » sur le réseau (voir le tableau ci-dessus : communication

@@ -8,6 +8,8 @@ import { normalizeMac } from './options.mjs'
 export const ALERT_SOURCE = {
   gateway_spoof: 'sensor', rogue_dhcp: 'sensor', mac_changed: 'sensor', arp_spoof_sweep: 'sensor',
   mac_flood: 'sensor', new_device: 'sensor',
+  malware_c2: 'sensor', lateral_scan: 'sensor', port_scan: 'sensor', anomaly_fanout: 'sensor',
+  mac_duplicate_location: 'sensor', gateway_duplicate_location: 'sensor',
   honeypot_touch: 'honeypot', honeypot_scan: 'honeypot', honeypot_login: 'honeypot',
   vuln_new: 'vuln_scan', vuln_fixed: 'vuln_scan', vuln_scan_summary: 'vuln_scan',
 }

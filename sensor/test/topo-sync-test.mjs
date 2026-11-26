@@ -117,6 +117,26 @@ export function topoSyncChecks(check, checkAsync) {
     assert.equal(new Set(client.db.devices.map((d) => d.mac)).size, client.db.devices.length) // aucun appareil en double
   })
 
+  checkAsync('lecture des switchs : la détection réseau-large reçoit bien les localisations par hôte et sa passerelle', async () => {
+    const client = fakeDb()
+    const calls = []
+    const ciscoBehavior = { observeSnapshot: (hostLocations, opts) => { calls.push([hostLocations, opts]); return [{ type: 'mac_duplicate_location', severity: 'h', mac: MACS.camera, title: 't', detail: 'd' }] } }
+    const sync = createTopologySync({ db: client, snmp: fakeSnmp(mixedNetwork()), config: CONFIG, oui: createOui({ table: TABLE }), log: () => {}, ciscoBehavior })
+    const r = await sync.run({ networkId: 'n1', gatewayIp: '10.15.0.1', gatewayMac: MACS.gw })
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0][1].gatewayMac, MACS.gw)
+    assert.ok(typeof calls[0][1].now === 'number')
+    assert.ok(calls[0][0].some((h) => h.mac === MACS.camera)) // les vraies localisations calculées par topology.mjs, pas une valeur inventée
+    assert.deepEqual(r.events, [{ type: 'mac_duplicate_location', severity: 'h', mac: MACS.camera, title: 't', detail: 'd' }])
+  })
+
+  checkAsync('lecture des switchs : sans moteur de détection réseau-large configuré → aucun événement (pas d’erreur)', async () => {
+    const client = fakeDb()
+    const sync = createTopologySync({ db: client, snmp: fakeSnmp(mixedNetwork()), config: CONFIG, oui: createOui({ table: TABLE }), log: () => {} })
+    const r = await sync.run({ networkId: 'n1', gatewayIp: '10.15.0.1' })
+    assert.deepEqual(r.events, [])
+  })
+
   checkAsync('lecture des switchs : mauvais identifiants ou adresses publiques → rien n\'est modifié', async () => {
     const client = fakeDb()
     client.db.links.push({ id: 'ancien', network_id: 'n1', source: 'fdb' })

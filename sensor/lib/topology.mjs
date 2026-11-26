@@ -141,5 +141,16 @@ export function buildTopology(polled = []) {
         : `port ${port.name} de ${sw} partagé par ${port.macs.size} appareils (switch non géré, hub ou point Wi-Fi sans LLDP)` })
   }
 
-  return { links, devices: [...devices.values()], arp }
+  // Pour la détection réseau-large (cisco-behavior.mjs) : TOUTES les localisations (switch + port) où une
+  // adresse MAC a été apprise comme extrémité ce passage-ci (liaisons entre switchs déjà écartées ci-dessus,
+  // via `candidates`). Une même adresse vue sur UN SEUL switch à la fois est normale, même si elle change de
+  // port d'un passage à l'autre (appareil débranché/rebranché) : ce n'est pas un doublon. Une même adresse
+  // apprise par PLUSIEURS switchs DANS CE MÊME passage n'est, elle, jamais normale pour un hôte final.
+  const hostLocations = [...candidates.entries()].map(([mac, list]) => {
+    const bySwitch = new Map()
+    for (const c of list) if (!bySwitch.has(c.p.ip)) bySwitch.set(c.p.ip, c.port.name)
+    return { mac, locations: [...bySwitch.entries()].map(([switchIp, port]) => ({ switchIp, port })) }
+  })
+
+  return { links, devices: [...devices.values()], arp, hostLocations }
 }

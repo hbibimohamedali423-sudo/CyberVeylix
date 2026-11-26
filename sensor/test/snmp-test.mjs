@@ -142,6 +142,27 @@ export function snmpChecks(check) {
   })
 
   check('topologie : aucune donnée → rien d\'inventé', () => {
-    assert.deepEqual(buildTopology([]), { links: [], devices: [], arp: new Map() })
+    assert.deepEqual(buildTopology([]), { links: [], devices: [], arp: new Map(), hostLocations: [] })
+  })
+
+  check('topologie : localisations par hôte (une par switch ; liaisons entre switchs toujours écartées)', () => {
+    const { hostLocations } = buildTopology(mixedNetwork())
+    const of = (k) => hostLocations.find((h) => h.mac === MACS[k])
+    assert.deepEqual(of('gw').locations, [{ switchIp: '10.15.0.2', port: 'Gi1/0/1' }]) // une seule : vu en extrémité sur S1 seulement
+    assert.equal(of('s1'), undefined) // un switch interrogé n'est jamais un hôte (own.has)
+    assert.equal(of('s2'), undefined)
+    assert.deepEqual(of('camera').locations, [{ switchIp: '10.15.0.3', port: 'port 5' }])
+  })
+
+  check('topologie : une même adresse MAC apprise par DEUX switchs → doublon signalé (clonage ou usurpation)', () => {
+    const net = mixedNetwork()
+    // La caméra (normalement vue uniquement sur S2, port 5) apparaît AUSSI en extrémité sur S1, port 3
+    // (remplace l'imprimante sur ce port, pour isoler le cas sans toucher au reste de la fixture).
+    net[0].fdb = net[0].fdb.map((e) => (e.mac === MACS.printer ? { ...e, mac: MACS.camera } : e))
+    const { hostLocations } = buildTopology(net)
+    const dup = hostLocations.find((h) => h.mac === MACS.camera)
+    assert.equal(dup.locations.length, 2)
+    assert.ok(dup.locations.some((l) => l.switchIp === '10.15.0.2' && l.port === 'Gi1/0/3'))
+    assert.ok(dup.locations.some((l) => l.switchIp === '10.15.0.3' && l.port === 'port 5'))
   })
 }

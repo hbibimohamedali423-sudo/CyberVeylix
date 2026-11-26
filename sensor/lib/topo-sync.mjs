@@ -45,10 +45,10 @@ export async function pollDevice(snmp, session, target, cred) {
   }
 }
 
-export function createTopologySync({ db, snmp, config, oui = null, log = console.log, now = () => new Date(), maxDevices = MAX_DEVICES, concurrency = 4 }) {
+export function createTopologySync({ db, snmp, config, oui = null, log = console.log, now = () => new Date(), maxDevices = MAX_DEVICES, concurrency = 4, ciscoBehavior = null }) {
   const working = new Map() // ip → identifiant qui a répondu la dernière fois (essayé en premier)
 
-  async function run({ networkId, gatewayIp }) {
+  async function run({ networkId, gatewayIp, gatewayMac = null }) {
     if (!db || !networkId) return null
     const stamp = now().toISOString()
     const devRes = await db.from('devices').select('id,name,ip,mac,type,role,role_evidence,role_confidence,vendor,hostname,model,discovery_source').eq('network_id', networkId)
@@ -94,6 +94,8 @@ export function createTopologySync({ db, snmp, config, oui = null, log = console
     while (queue.length) await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker))
 
     const topo = buildTopology(polled)
+    // Détection réseau-large (adresse MAC apprise par plusieurs switchs à la fois) : voir cisco-behavior.mjs.
+    const events = ciscoBehavior ? ciscoBehavior.observeSnapshot(topo.hostLocations, { gatewayMac, now: now().getTime() }) : []
 
     // Appareils : retrouvés par MAC puis par IP ; créés s'ils manquent ; rôle précisé si posé par le capteur.
     const byMac = new Map(devices.filter((d) => d.mac).map((d) => [String(d.mac).toLowerCase(), d]))
@@ -158,7 +160,7 @@ export function createTopologySync({ db, snmp, config, oui = null, log = console
       // La lecture SNMP fournit la carte complète : elle remplace les liens fdb / lldp / cdp du réseau. La liaison
       // entendue passivement (LLDP / CDP) n'est écrite par le capteur que lorsque le SNMP n'est PAS configuré.
       const del = await db.from('links').delete().eq('network_id', networkId).in('source', SOURCES)
-      if (del.error) { log('⚠ Liens non mis à jour : ' + del.error.message); return { polled: polled.length, unreachable, created, updated, links: 0 } }
+      if (del.error) { log('⚠ Liens non mis à jour : ' + del.error.message); return { polled: polled.length, unreachable, created, updated, links: 0, events } }
       for (let i = 0; i < rows.length; i += 200) {
         const r = await db.from('links').insert(rows.slice(i, i + 200)).select('id')
         if (r.error) log('⚠ Liens non enregistrés : ' + r.error.message)
@@ -166,7 +168,7 @@ export function createTopologySync({ db, snmp, config, oui = null, log = console
       }
     }
     log(`Topologie (SNMP) : ${polled.length} équipement(s) lu(s), ${unreachable} sans réponse, ${created} appareil(s) ajouté(s), ${linked} lien(s).`)
-    return { polled: polled.length, unreachable, created, updated, links: linked }
+    return { polled: polled.length, unreachable, created, updated, links: linked, events }
   }
 
   return { run }
