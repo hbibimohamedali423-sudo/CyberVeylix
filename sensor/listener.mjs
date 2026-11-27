@@ -440,7 +440,11 @@ if (opts.fortigate) {
       const r = applyFortigate(poll, { behavior, inventory, now: Date.now() })
       if (r.events.length) report(r.events)
       const errs = Object.entries(poll.errors || {})
+      const rz = r.reachability
+      const open = rz.matrix.filter((m) => m.allowed === true).length
+      const uncertain = rz.matrix.filter((m) => m.allowed === null).length
       console.log(`Pare-feu : ${r.deviceCount} appareil(s), ${r.vlanCount} VLAN, ${r.sessionCount} session(s)${errs.length ? ` (${errs.map(([k, m]) => `${k} : ${m}`).join(', ')})` : ''}.`)
+      console.log(`Atteignabilité VLAN : ${rz.zones.length} zone(s), ${rz.matrix.length} paire(s) évaluée(s), ${open} autorisée(s), ${uncertain} incertaine(s) (règle non résolue). Pas encore enregistrée (étape suivante).`)
     } catch (e) {
       console.log(`⚠ Pare-feu FortiGate injoignable : ${e && e.message}.`)
     }

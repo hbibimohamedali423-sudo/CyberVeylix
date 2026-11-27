@@ -2,8 +2,13 @@
 //   - enregistre dans l'inventaire tout appareil vu par le pare-feu (baux DHCP + table ARP),
 //     y compris ceux des autres VLAN que le capteur ne voit pas en écoute directe ;
 //   - alimente le moteur de comportement avec les sessions (« qui parle à qui ») pour détecter
-//     le balayage, les ports sondés et la communication avec une adresse malveillante connue.
+//     le balayage, les ports sondés et la communication avec une adresse malveillante connue ;
+//   - calcule la matrice d'atteignabilité VLAN-à-VLAN (reachability.mjs) à partir des règles de
+//     pare-feu lues. Pour l'instant seulement CALCULÉE et renvoyée à l'appelant (listener.mjs la
+//     journalise) : son stockage et son affichage dans le tableau de bord sont une étape séparée,
+//     volontairement pas encore faite (nécessite une table Supabase à proposer puis approuver).
 // Rien n'est modifié sur le pare-feu. Pur et testable : inventory et behavior sont injectés.
+import { buildVlanReachability } from './reachability.mjs'
 
 export function applyFortigate(poll, { behavior, inventory, now = Date.now() } = {}) {
   const events = []
@@ -34,5 +39,8 @@ export function applyFortigate(poll, { behavior, inventory, now = Date.now() } =
   }
 
   const vlans = new Set((poll.interfaces || []).map((i) => i.vlan).filter((v) => v != null))
-  return { events, deviceCount: devices.size, vlanCount: vlans.size, sessionCount: (poll.sessions || []).length }
+  const reachability = buildVlanReachability({
+    interfaces: poll.interfaces || [], policies: poll.policies || [], addresses: poll.addresses || [], addressGroups: poll.addressGroups || [],
+  })
+  return { events, deviceCount: devices.size, vlanCount: vlans.size, sessionCount: (poll.sessions || []).length, reachability }
 }

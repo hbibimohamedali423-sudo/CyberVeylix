@@ -5,6 +5,8 @@
 // l'essai sur un vrai FortiGate ; l'analyse reste défensive pour ne jamais planter sur une réponse.
 // Lecture seule : ce module ne fait qu'interpréter des données déjà reçues.
 
+import { ipToInt, parseCidr } from './threatlist.mjs'
+
 const norm = (v) => (v === undefined || v === null ? null : v)
 const first = (obj, keys) => { for (const k of keys) if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== '') return obj[k]; return null }
 
@@ -120,3 +122,85 @@ function toPort(v) {
 
 // Sessions -> flux pour behavior.observe (on ne garde que ce qui nous intéresse).
 export const sessionsToFlows = (sessions, ts) => sessions.map((s) => ({ src: s.src, dst: s.dst, dstPort: s.dstPort, ts }))
+
+// Un champ FortiOS « liste de noms » peut être un tableau de chaînes, un tableau de { name }, ou
+// une seule valeur (PowerShell/FortiOS « déballent » parfois un tableau d'un seul élément).
+function names(v) {
+  const arr = Array.isArray(v) ? v : v !== undefined && v !== null ? [v] : []
+  return arr.map((x) => (x && typeof x === 'object' ? x.name : x)).filter((x) => typeof x === 'string' && x)
+}
+
+// Objets adresse (cmdb/firewall/address) : résolus en PLAGE NUMÉRIQUE (lo..hi, réutilise
+// ipToInt/parseCidr de threatlist.mjs — une seule mathématique d'adresses dans tout le capteur)
+// quand le type le permet (« ipmask », « iprange »). Un type non résolvable (fqdn, géographie…)
+// est marqué comme tel, jamais deviné : mieux vaut dire « je ne sais pas » que supposer une
+// portée fausse. « all »/« any » (objet intégré de FortiOS) est traité à part par l'appelant.
+export function parseAddressObjects(payload) {
+  const out = []
+  for (const row of toArray(payload)) {
+    const name = first(row, ['name'])
+    if (!name) continue
+    const type = String(first(row, ['type']) || '').toLowerCase()
+    const startIp = first(row, ['start-ip', 'startIp'])
+    const endIp = first(row, ['end-ip', 'endIp'])
+    const rawSubnet = first(row, ['subnet'])
+    let lo = null
+    let hi = null
+    let cidr = null
+    if (isIpv4(startIp) && isIpv4(endIp)) {
+      lo = ipToInt(startIp)
+      hi = ipToInt(endIp)
+      if (lo !== null && hi !== null && hi < lo) [lo, hi] = [hi, lo]
+    } else if (rawSubnet) {
+      const parts = Array.isArray(rawSubnet) ? rawSubnet : String(rawSubnet).trim().split(/\s+/)
+      const [addr, mask] = parts
+      if (isIpv4(addr)) {
+        const p = isIpv4(mask) ? maskToPrefix(mask) : (Number.isInteger(Number(mask)) ? Number(mask) : 32)
+        if (p !== null && p >= 0 && p <= 32) {
+          cidr = `${addr}/${p}`
+          const r = parseCidr(cidr)
+          if (r) ({ lo, hi } = r)
+        }
+      }
+    }
+    const resolved = lo !== null && hi !== null
+    out.push({ name: String(name), type: type || null, cidr, lo, hi, resolved, reason: resolved ? null : `type « ${type || 'inconnu'} » non résolvable (pas une adresse IPv4 fixe)` })
+  }
+  return out
+}
+
+// Groupes d'adresses (cmdb/firewall/addrgrp) : juste la liste des membres (noms), résolue plus
+// tard par resolveAddressNames (récursif, avec protection contre les boucles).
+export function parseAddressGroups(payload) {
+  const out = []
+  for (const row of toArray(payload)) {
+    const name = first(row, ['name'])
+    if (!name) continue
+    out.push({ name: String(name), members: names(first(row, ['member', 'members'])) })
+  }
+  return out
+}
+
+// Règles de pare-feu (cmdb/firewall/policy) : seules les propriétés nécessaires à la question
+// « cette règle autorise-t-elle A à joindre B ? ». Rien d'autre n'est interprété ici.
+export function parsePolicies(payload) {
+  const out = []
+  for (const row of toArray(payload)) {
+    const id = first(row, ['policyid', 'id'])
+    if (id === null) continue
+    const action = String(first(row, ['action']) || 'deny').toLowerCase()
+    const status = String(first(row, ['status']) || 'enable').toLowerCase()
+    out.push({
+      id: String(id),
+      name: norm(first(row, ['name'])),
+      srcintf: names(first(row, ['srcintf'])),
+      dstintf: names(first(row, ['dstintf'])),
+      srcaddr: names(first(row, ['srcaddr'])),
+      dstaddr: names(first(row, ['dstaddr'])),
+      service: names(first(row, ['service'])),
+      action: action === 'accept' ? 'accept' : 'deny',
+      enabled: status !== 'disable',
+    })
+  }
+  return out
+}

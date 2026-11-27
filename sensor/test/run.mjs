@@ -21,6 +21,7 @@ import { snmpLiveChecks } from './snmp-live-test.mjs'
 import { behaviorChecks, threatlistChecks } from './behavior-test.mjs'
 import { fortigateChecks } from './fortigate-test.mjs'
 import { ciscoBehaviorChecks } from './cisco-behavior-test.mjs'
+import { reachabilityChecks } from './reachability-test.mjs'
 import { topoSyncChecks } from './topo-sync-test.mjs'
 import { notifyChecks } from './notify-test.mjs'
 import { lldpChecks } from './lldp-test.mjs'
@@ -524,6 +525,7 @@ threatlistChecks(check)
 behaviorChecks(check)
 fortigateChecks(check, checkAsync)
 ciscoBehaviorChecks(check)
+reachabilityChecks(check)
 topoSyncChecks(check, checkAsync)
 notifyChecks(check, checkAsync)
 lldpChecks(check)

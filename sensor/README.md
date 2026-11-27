@@ -173,6 +173,21 @@ l'erreur est journalisée. L'intégration a été construite et testée avec des
 exacts des champs seront confirmés au premier essai sur un pare-feu réel et ajustés si besoin dans
 `lib/fortigate-parse.mjs`. Cisco (SNMP) suivra la même logique, voir la section SNMP ci-dessus.
 
+### Atteignabilité VLAN-à-VLAN (lecture seule, calculée uniquement)
+À partir des mêmes données FortiGate (interfaces/VLAN + règles de pare-feu + objets et groupes
+d'adresses), le capteur calcule à chaque interrogation une matrice « le VLAN A peut-il joindre le
+VLAN B ? » — avec la règle exacte comme preuve, jamais une déduction non vérifiable. Trois résultats
+possibles par paire : **autorisé** (règle `accept` identifiée), **bloqué** (règle `deny` identifiée, ou
+aucune règle ne correspond — refus par défaut), **incertain** (une règle antérieure, dans l'ordre réel
+d'évaluation du pare-feu, référence une adresse non résolvable — ex. un FQDN — qui pourrait changer la
+réponse). Volontairement limité au VLAN-à-VLAN (pas de simulation du routage, du NAT ni des ACL de
+switch) pour que chaque conclusion reste traçable à une donnée réellement lue.
+
+Pour l'instant seulement **calculée et journalisée** dans la console du capteur ; son enregistrement et
+son affichage dans le tableau de bord sont une étape séparée, pas encore faite (nécessite une nouvelle
+table Supabase, à proposer en SQL et à faire approuver avant toute application, conformément aux règles
+du projet).
+
 ## Alertes instantanées sur téléphone (Telegram)
 Facultatif. Avec `notify.json` dans le dossier de données (créé par l'installateur : jeton vérifié auprès de
 Telegram, conversation trouvée après « /start », message de test), les alertes **critiques et hautes** sont envoyées

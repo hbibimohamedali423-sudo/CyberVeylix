@@ -9,13 +9,19 @@
 //   - baux DHCP (tous les VLAN)     monitor/system/dhcp
 //   - table ARP (tous les VLAN)     monitor/network/arp
 //   - sessions actives (qui→qui)    monitor/firewall/session
-import { parseInterfaces, parseDhcpLeases, parseArpTable, parseSessions } from './fortigate-parse.mjs'
+//   - objets/groupes adresse        cmdb/firewall/address, cmdb/firewall/addrgrp
+//   - règles de pare-feu            cmdb/firewall/policy
+// Les trois derniers servent uniquement à reachability.mjs (qui peut joindre qui entre VLAN).
+import { parseInterfaces, parseDhcpLeases, parseArpTable, parseSessions, parseAddressObjects, parseAddressGroups, parsePolicies } from './fortigate-parse.mjs'
 
 const ENDPOINTS = {
   interfaces: 'api/v2/cmdb/system/interface',
   leases: 'api/v2/monitor/system/dhcp',
   arp: 'api/v2/monitor/network/arp',
   sessions: 'api/v2/monitor/firewall/session',
+  addresses: 'api/v2/cmdb/firewall/address',
+  addressGroups: 'api/v2/cmdb/firewall/addrgrp',
+  policies: 'api/v2/cmdb/firewall/policy',
 }
 
 export function createFortigateClient(config = {}) {
@@ -49,7 +55,7 @@ export function createFortigateClient(config = {}) {
 
   // Interroge tous les points ; un point en échec n'empêche pas les autres (erreurs collectées).
   async function poll() {
-    const out = { interfaces: [], leases: [], arp: [], sessions: [], errors: {} }
+    const out = { interfaces: [], leases: [], arp: [], sessions: [], addresses: [], addressGroups: [], policies: [], errors: {} }
     const run = async (key, parse) => {
       try { out[key] = parse(await get(ENDPOINTS[key])) }
       catch (e) { out.errors[key] = (e && e.message) || String(e) }
@@ -59,6 +65,9 @@ export function createFortigateClient(config = {}) {
       run('leases', parseDhcpLeases),
       run('arp', parseArpTable),
       run('sessions', parseSessions),
+      run('addresses', parseAddressObjects),
+      run('addressGroups', parseAddressGroups),
+      run('policies', parsePolicies),
     ])
     return out
   }
