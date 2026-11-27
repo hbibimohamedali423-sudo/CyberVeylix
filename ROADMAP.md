@@ -6,6 +6,10 @@ pas le code ni l'historique Git : il n'affirme que ce qui est réellement commit
 
 **Dernière mise à jour :** 2026-11-27, branche `claude/integration-travail-local`.
 
+**⏸️ Travail mis en pause ici, volontairement.** À la reprise, lire seulement les deux sections
+« Prochaine étape unique » et « En attente de l'utilisateur » ci-dessous : elles suffisent pour
+repartir sans tout relire.
+
 ## ✅ Terminé, testé, commité sur cette branche
 
 - **Capteur passif de base** (préexistant) : écoute ARP/DHCP, leurres (honeypot), analyse des
