@@ -27,8 +27,10 @@ pas le code ni l'historique Git : il n'affirme que ce qui est réellement commit
   (adresse non résolvable qui pourrait changer la réponse). Respecte l'ordre réel d'évaluation
   des règles FortiGate (première correspondance gagne — une première version ignorait cet ordre
   et a été corrigée avant tout test). 21 tests dédiés, y compris les cas d'ordre de règles.
-  **Calculée et journalisée uniquement pour l'instant** (console du capteur) — pas encore
-  enregistrée ni affichée dans le tableau de bord (voir ci-dessous).
+- **Enregistrement de l'atteignabilité dans Supabase** (`syncReachability` dans `sensor/lib/push.mjs`) :
+  avec `--push` et la table créée (voir juste en dessous), la matrice complète remplace l'état
+  précédent à chaque interrogation (comme les liens de topologie) — table absente : message
+  unique, rien ne plante. **Affichage dans le tableau de bord : pas encore fait** (voir ci-dessous).
 
 Capteur publié : version 0.13.3 (voir `sensor/package.json`). **Pas encore testé sur un vrai
 pare-feu/switch réel** — construit et vérifié par des exemples seulement, à confirmer au premier
@@ -36,18 +38,15 @@ essai sur le réseau Meridiana.
 
 ## 🚧 En cours
 
-Rien en cours de construction actuellement — la dernière étape (atteignabilité VLAN) est
-terminée, testée (238/238) et commitée. En attente d'une décision utilisateur avant de continuer
-(voir « Prochaine étape » ci-dessous).
+Rien en cours de construction actuellement. L'atteignabilité VLAN est calculée ET enregistrée
+dans Supabase (si `supabase/schema_r9_reachability.sql` a été exécuté) ; seul l'affichage dans le
+tableau de bord manque encore.
 
-## ⏭️ Prochaine étape (au choix de l'utilisateur)
+## ⏭️ Prochaine étape unique
 
-L'analyse d'atteignabilité VLAN est calculée mais invisible pour l'instant (console seulement).
-Pour qu'elle serve réellement, il faut, dans l'ordre :
-1. Proposer une nouvelle table Supabase (SQL dans un fichier séparé, à approuver — aucune
-   modification de schéma ne sera appliquée sans accord explicite, règle du projet).
-2. Enregistrer la matrice calculée dans cette table à chaque interrogation du pare-feu.
-3. Construire la page du tableau de bord qui l'affiche.
+Construire la page/section du tableau de bord qui affiche la matrice d'atteignabilité déjà
+enregistrée dans la table `vlan_reachability` (lecture seule côté interface, rien à calculer
+côté React).
 
 Pistes additionnelles déjà discutées et notées en mémoire, pas encore commencées : détection de
 règles de pare-feu mortes/trop larges, détection de point unique de défaillance (switch/lien) à
@@ -56,6 +55,8 @@ partir de la topologie déjà lue, classement des appareils par « rayon d'impac
 
 ## ⏳ En attente du côté de l'utilisateur (rien à coder)
 
+- Exécuter `supabase/schema_r9_reachability.sql` dans Supabase (SQL Editor) pour que
+  l'atteignabilité VLAN soit réellement enregistrée — sinon le capteur continue, mais sans écrire.
 - Demander la community SNMP (lecture seule) à l'administrateur réseau de Meridiana : sans elle,
   la lecture des switchs et la nouvelle détection Cisco ne fonctionnent pas sur ce réseau.
 - Activer « Leaked password protection » dans Supabase (Authentication).
