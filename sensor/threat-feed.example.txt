@@ -1,0 +1,20 @@
+# Liste de menaces CyberVeylix — exemple de format.
+#
+# Pour l'activer : copiez ce fichier en « data/threat-feed.txt » à côté du capteur
+# (ou indiquez son chemin dans THREAT_FEED). Le capteur le lit au démarrage et signale
+# tout appareil du réseau qui communique avec une adresse / un domaine listé ici.
+#
+# Une entrée par ligne. Les lignes vides et celles commençant par # sont ignorées.
+# Formats acceptés :
+#   - une adresse IPv4            203.0.113.10
+#   - une plage CIDR              198.51.100.0/24
+#   - un domaine                  mauvais-domaine.example
+#   - avec une étiquette          203.0.113.10 , Serveur C2 connu
+#
+# Remplissez-la à partir de sources de confiance (listes publiques d'indicateurs de menace,
+# avis de votre fournisseur de sécurité). Les lignes ci-dessous ne sont que des EXEMPLES
+# de documentation (RFC 5737 / .example) et ne désignent aucune vraie adresse malveillante.
+
+203.0.113.10 , Exemple : serveur de commande
+198.51.100.0/24 , Exemple : plage malveillante
+c2.example , Exemple : domaine de malware

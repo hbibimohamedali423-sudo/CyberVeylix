@@ -1,0 +1,6 @@
+# Scripts Windows : stockés tels quels, en CRLF, sans aucune conversion de fin de ligne par Git
+# (ni core.autocrlf, ni normalisation). Ils restent ainsi en CRLF quelle que soit la façon dont ils
+# arrivent : clonage, git apply d'un patch, Git pour Windows. cmd.exe lit mal les fichiers LF.
+*.cmd -text
+*.bat -text
+*.ps1 -text

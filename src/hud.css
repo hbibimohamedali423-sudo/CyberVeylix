@@ -1,0 +1,79 @@
+/* Habillage « HUD » du thème sombre (même fond et mêmes couleurs que la page de connexion).
+   Toutes les règles sont limitées au thème sombre : le thème clair reste inchangé. */
+:root:not([data-theme="light"]){
+  --bg:#0F242B;--p:#12303A;--b:#2A5560;--c:#33E6F5;--t:#E3F6F8;--m:#8FB4BB;--glow:#14343D;
+  --panel1:rgba(22,54,63,.78);--panel2:rgba(12,30,36,.85);--surface:#15343D;--surface2:#1E4450;
+  --border-soft:#22464F;--row-border:#1D3D45;--nav-text:#B8D4D9;--ic-bg:#12303A;
+  --map-land:#12303A;--map-stroke:#2A5560;--map-grid:#1D3D45;--chart:#33E6F5;--track:#1D3D45;
+  --banner-base:#0F242B;--banner-a:#1C6A75;--banner-b:#12303A;--promo1:#14343D;--promo2:#0D1F25;
+  --primary:#1A6F7A;--nav-active1:rgba(51,230,245,.20);--nav-active2:rgba(51,230,245,.03);
+  --type-network:#33E6F5;--type-workstation:#2FB8D0;
+  --page-bg:radial-gradient(70% 65% at 50% 30%,#15343D 0%,#0F242B 55%,#0A181D 100%);
+  --card-bg:linear-gradient(160deg,rgba(22,54,63,.80),rgba(11,28,34,.88));--card-border:#2A5560;
+  --input-bg:#10272E;--input-border:#2A5560;--surface-hover:#1E4450;--top-bg:rgba(9,22,27,.86);
+  --footer-bg:rgba(9,22,27,.86);--dialog-bg:#10272E;--site-bg:#12303A;--control-bg:#12303A;
+  --card-shadow:none;--icon-shadow:0 0 10px rgba(51,230,245,.35);--shield-shadow:0 0 12px rgba(51,230,245,.6);
+  --nav-active-shadow:none;--focus-color:#33E6F5;--accent-ink:#33E6F5;--overlay:rgba(3,10,12,.72);
+  --banner-bg:radial-gradient(ellipse at 75% 120%,rgba(51,230,245,.30) 0,rgba(28,106,117,.25) 30%,transparent 62%),linear-gradient(160deg,#14343D,#0D1F25);
+  --promo-bg:linear-gradient(160deg,#14343D,#0D1F25)}
+
+/* Fond : quadrillage fin + lignes marquées, halos doux, vignette. */
+:root:not([data-theme="light"]){background:#0A181D}
+:root:not([data-theme="light"]) body{background:var(--page-bg);background-attachment:fixed;font-family:"Saira",system-ui,-apple-system,"Segoe UI",sans-serif}
+:root:not([data-theme="light"]) body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    linear-gradient(rgba(140,215,225,.09) 1px,transparent 1px) 0 0/100px 100px,
+    linear-gradient(90deg,rgba(140,215,225,.09) 1px,transparent 1px) 0 0/100px 100px,
+    linear-gradient(rgba(140,215,225,.045) 1px,transparent 1px) 0 0/20px 20px,
+    linear-gradient(90deg,rgba(140,215,225,.045) 1px,transparent 1px) 0 0/20px 20px,
+    radial-gradient(30% 35% at 12% 70%,rgba(130,70,45,.12),transparent 70%),
+    radial-gradient(30% 40% at 88% 30%,rgba(35,120,120,.16),transparent 70%)}
+
+/* Titres de section : capitales étroites, comme les en-têtes du modèle. */
+:root:not([data-theme="light"]) h3{font:400 19px/1.1 "Saira Condensed","Saira",sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#E9F7F9}
+:root:not([data-theme="light"]) .main h2,:root:not([data-theme="light"]) .main h1{font-family:"Saira Condensed","Saira",sans-serif;font-weight:400;letter-spacing:.04em;text-transform:uppercase;color:#E9F7F9}
+:root:not([data-theme="light"]) .main h4{font:400 15px/1.2 "Saira Condensed","Saira",sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#7FE9F4}
+:root:not([data-theme="light"]) small,:root:not([data-theme="light"]) .m{font-family:"Share Tech Mono",ui-monospace,monospace;letter-spacing:.04em}
+
+/* Panneaux : angles nets, trait cyan à gauche du titre et coin de visée en haut à droite. */
+:root:not([data-theme="light"]) .card{position:relative;border-radius:3px}
+:root:not([data-theme="light"]) .card::before{content:"";position:absolute;inset-inline-start:-1px;top:14px;width:3px;height:18px;background:var(--c);box-shadow:0 0 8px rgba(51,230,245,.6)}
+:root:not([data-theme="light"]) .card::after{content:"";position:absolute;inset-inline-end:-1px;top:-1px;width:14px;height:14px;border-top:2px solid var(--c);border-inline-end:2px solid var(--c);pointer-events:none}
+:root:not([data-theme="light"]) .banner{border-radius:3px}
+:root:not([data-theme="light"]) .banner h1{font:400 34px/1.05 "Saira Condensed","Saira",sans-serif;letter-spacing:.03em;text-transform:uppercase;color:#4FECF8;text-shadow:0 0 10px rgba(51,230,245,.4)}
+:root:not([data-theme="light"]) .kpi b{font:300 32px/1 "Saira",sans-serif;color:#fff}
+
+/* Barre du haut. */
+:root:not([data-theme="light"]) .top{background:var(--top-bg);border-bottom:1px solid var(--card-border);backdrop-filter:blur(4px)}
+:root:not([data-theme="light"]) .logo{font:600 24px "Exo 2","Saira",sans-serif;color:#3FE8F4;text-shadow:0 0 10px rgba(51,230,245,.45)}
+:root:not([data-theme="light"]) .logo small{font:400 8.5px "Share Tech Mono",ui-monospace,monospace;letter-spacing:.2em;color:var(--m);text-shadow:none}
+:root:not([data-theme="light"]) .search{border-radius:2px;background:rgba(16,39,46,.8)}
+:root:not([data-theme="light"]) .av{border-radius:2px;background:linear-gradient(135deg,#33E6F5,#1A6F7A)}
+
+/* Menu latéral : capitales étroites, élément actif souligné d'un trait cyan. */
+:root:not([data-theme="light"]) nav button{font:400 15px "Saira Condensed","Saira",sans-serif;letter-spacing:.05em;text-transform:uppercase;border-radius:2px;border-inline-start:3px solid transparent}
+:root:not([data-theme="light"]) nav button i{border-color:#4F7880;border-radius:2px;transform:rotate(45deg) scale(.8)}
+:root:not([data-theme="light"]) nav button:not(.on):hover{background:rgba(51,230,245,.06);color:#fff}
+:root:not([data-theme="light"]) nav button.on{background:linear-gradient(90deg,var(--nav-active1),var(--nav-active2));color:#fff;border-inline-start-color:var(--c)}
+:root:not([data-theme="light"]) nav button.on i{border-color:var(--c);box-shadow:0 0 6px rgba(51,230,245,.6)}
+:root:not([data-theme="light"]) .promo{border-radius:3px}
+:root:not([data-theme="light"]) .promo b{font:400 16px "Saira Condensed","Saira",sans-serif;letter-spacing:.04em;text-transform:uppercase}
+
+/* Champs et boutons. */
+:root:not([data-theme="light"]) input,:root:not([data-theme="light"]) select,:root:not([data-theme="light"]) textarea{border-radius:2px}
+:root:not([data-theme="light"]) input:focus,:root:not([data-theme="light"]) select:focus,:root:not([data-theme="light"]) textarea:focus{border-color:var(--c);outline:none;box-shadow:0 0 0 1px var(--c)}
+:root:not([data-theme="light"]) button{border-radius:2px;background:linear-gradient(180deg,#1E5862,#12353C);color:#E9FCFD;box-shadow:inset 0 0 0 1px var(--c);letter-spacing:.04em}
+:root:not([data-theme="light"]) button:not(:disabled):hover{background:linear-gradient(180deg,#24707C,#164650)}
+:root:not([data-theme="light"]) nav button,:root:not([data-theme="light"]) .tg-btn,:root:not([data-theme="light"]) .right-reports button{box-shadow:none;background:transparent}
+:root:not([data-theme="light"]) nav button.on{background:linear-gradient(90deg,var(--nav-active1),var(--nav-active2))}
+:root:not([data-theme="light"]) button.x{box-shadow:inset 0 0 0 1px var(--card-border);background:var(--surface2)}
+
+/* Tableaux : en-têtes en petites capitales techniques. */
+:root:not([data-theme="light"]) thead th{font:400 10.5px "Share Tech Mono",ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--m)}
+
+/* Pied de page discret. */
+:root:not([data-theme="light"]) footer{font:400 10.5px "Share Tech Mono",ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;backdrop-filter:blur(4px)}
+
+/* Arabe : pas de capitales ni d'espacement des lettres (les liaisons doivent rester). */
+:root:lang(ar):not([data-theme="light"]) h3,:root:lang(ar):not([data-theme="light"]) .main h4,:root:lang(ar):not([data-theme="light"]) .main h2,:root:lang(ar):not([data-theme="light"]) .main h1,:root:lang(ar):not([data-theme="light"]) nav button,:root:lang(ar):not([data-theme="light"]) thead th,:root:lang(ar):not([data-theme="light"]) footer,:root:lang(ar):not([data-theme="light"]) small,:root:lang(ar):not([data-theme="light"]) .m,:root:lang(ar):not([data-theme="light"]) .banner h1,:root:lang(ar):not([data-theme="light"]) button{letter-spacing:0;font-family:"Saira",system-ui,sans-serif}
+:root:lang(ar):not([data-theme="light"]) nav button{font-size:14px}

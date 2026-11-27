@@ -138,6 +138,11 @@ check('en-têtes français par jeu de données', () => {
   assert.deepEqual(byKind('threats').headers, ['Catégorie', 'Bloquée', 'Date'])
 })
 
+check('appareil sans type exporté « Inconnu »', () => {
+  const rows = byKind('devices').rows([{ id: 5, name: 'SansType', ip: '192.168.1.50', type: null, status: 'un' }])
+  assert.equal(rows[0][3], 'Inconnu')
+})
+
 check('appareils : nom puis IP, ports et services joints, orphelins ignorés', () => {
   const rows = byKind('devices').rows(devices, { services })
   assert.deepEqual(rows.map((r) => [r[0], r[1]]), [['Alpha', '192.168.1.10'], ['Alpha', '192.168.1.2'], ['Zeta', '192.168.1.20']])

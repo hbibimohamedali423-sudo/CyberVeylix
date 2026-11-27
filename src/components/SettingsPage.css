@@ -1,0 +1,13 @@
+.settings-page .sensor-settings{border:1px solid var(--b);border-radius:10px;padding:14px 16px;margin-top:16px;display:grid;gap:12px;max-width:720px}
+.settings-page h4{margin:0;font-size:15px}
+.settings-page .ss-running{color:var(--success-ink)}
+.settings-page .ss-stopped{color:var(--danger-ink)}
+.settings-page .ss-never{color:var(--m)}
+.settings-page .ss-switch{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.settings-page .ss-switch input{width:18px;height:18px;margin:2px 0 0;flex:none}
+.settings-page .ss-trusted{display:flex;flex-direction:column;gap:6px}
+.settings-page textarea{min-height:90px;resize:vertical;background:var(--input-bg);color:var(--t);border:1px solid var(--input-border);border-radius:6px;padding:8px 10px;font:inherit}
+.settings-page button{width:auto;justify-self:start;margin:0;padding:8px 16px}
+.settings-page .ss-err{color:var(--danger-ink);font-size:12px}
+.settings-page .ss-ok{color:var(--success-ink);font-size:12px}
+.settings-page :focus-visible{outline:2px solid var(--focus-color);outline-offset:2px}

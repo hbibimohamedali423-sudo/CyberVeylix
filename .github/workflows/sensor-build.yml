@@ -1,0 +1,175 @@
+# Construit le paquet Windows prêt à l'emploi du capteur CyberVeylix :
+# Node.js + module de capture déjà compilé + installateur. Le PC du client n'a besoin que de Npcap.
+#
+# - Lancement manuel (onglet Actions) ou pull request touchant sensor/ : paquet en « artefact ».
+# - Tag « sensor-vX.Y.Z » (même version que sensor/package.json) : publication d'une release GitHub.
+#   Deux façons, au choix : pousser le tag, OU créer la release depuis la page GitHub (Releases > Draft a new
+#   release, tag sensor-vX.Y.Z). Dans les deux cas le paquet est construit puis joint à la release (sans doublon).
+name: Capteur Windows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'sensor/**'
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - '.github/workflows/sensor-build.yml'
+  push:
+    tags:
+      - 'sensor-v*'
+  release:
+    types: [published]
+
+# Une release créée depuis la page GitHub crée aussi le tag : les deux exécutions éventuelles passent l'une après l'autre.
+concurrency:
+  group: capteur-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # windows-2022 (Visual Studio 2022) : l'image windows-latest embarque Visual Studio 2026,
+    # que node-gyp ne reconnaît pas encore (« unknown version ») → le module « cap » ne compile pas.
+    runs-on: windows-2022
+    permissions:
+      contents: write # nécessaire uniquement pour publier la release sur un tag
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Analyse syntaxique avec Windows PowerShell 5.1 (celle des PC clients)
+        shell: powershell
+        run: |
+          Write-Host ("Windows PowerShell " + $PSVersionTable.PSVersion)
+          $failed = $false
+          foreach ($f in @('sensor/install.ps1', 'sensor/uninstall.ps1')) {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f).Path, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              foreach ($e in $errors) { Write-Host "::error file=$f,line=$($e.Extent.StartLineNumber)::$($e.Message)" }
+            } else { Write-Host "OK  $f" }
+          }
+          if ($failed) { exit 1 }
+
+      - name: PSScriptAnalyzer (erreurs et compatibilité 5.1)
+        shell: powershell
+        run: |
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+            Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
+            Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          }
+          $settings = @{
+            Rules = @{ PSUseCompatibleSyntax = @{ Enable = $true; TargetVersions = @('5.1') } }
+          }
+          $all = @()
+          foreach ($f in @('sensor/install.ps1', 'sensor/uninstall.ps1')) {
+            $all += @(Invoke-ScriptAnalyzer -Path $f -Settings $settings)
+          }
+          $all | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize -Wrap | Out-String -Width 220 | Write-Host
+          $blocking = @($all | Where-Object { $_.Severity -eq 'Error' -or $_.RuleName -eq 'PSUseCompatibleSyntax' })
+          foreach ($d in $blocking) { Write-Host "::error file=sensor/$($d.ScriptName),line=$($d.Line)::$($d.RuleName): $($d.Message)" }
+          if ($blocking.Count -gt 0) { exit 1 }
+
+      - name: Dépendances et compilation du module de capture
+        run: npm ci --prefix sensor --omit=dev
+
+      - name: Tests du capteur
+        run: node sensor/test/run.mjs
+
+      # Interface (tableau de bord) servie par le capteur lui-même : build React statique, dossier « ui » du paquet.
+      # Aucune clé dans le build : l'URL Supabase et la clé publique viennent de agent.env au lancement (/config.js).
+      - name: Interface (build)
+        shell: pwsh
+        run: |
+          npm ci
+          npm run build
+          if (-not (Test-Path dist/index.html)) { throw 'Build de l''interface absent (dist/index.html).' }
+
+      - name: Assemblage du paquet
+        shell: pwsh
+        run: |
+          $version = (Get-Content sensor/package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF -like 'refs/tags/sensor-v*' -and $env:GITHUB_REF_NAME -ne "sensor-v$version") {
+            throw "Le tag $env:GITHUB_REF_NAME ne correspond pas à la version de sensor/package.json ($version)."
+          }
+          $cap = 'sensor/node_modules/cap/build/Release/cap.node'
+          if (-not (Test-Path $cap)) { throw "Module de capture non compilé ($cap absent)." }
+
+          $name = "cyberveylix-sensor-$version-windows-x64"
+          $out = Join-Path $env:RUNNER_TEMP $name
+          New-Item -ItemType Directory -Path $out | Out-Null
+          foreach ($i in @('listener.mjs', 'package.json', 'README.md', 'install.ps1', 'uninstall.ps1',
+                          'install.cmd', 'uninstall.cmd', 'vulnscan.cmd', 'vulnscan.mjs', 'lib', 'node_modules')) {
+            Copy-Item -Path "sensor/$i" -Destination $out -Recurse
+          }
+
+          Copy-Item -Path 'dist' -Destination (Join-Path $out 'ui') -Recurse
+
+          # Même node.exe que celui qui a compilé cap.node : compatibilité binaire garantie.
+          $node = (Get-Command node).Source
+          Copy-Item $node $out
+          $nodeVersion = (& $node -p 'process.versions.node').Trim()
+          $license = Join-Path (Split-Path $node) 'LICENSE'
+          if (Test-Path $license) {
+            Copy-Item $license (Join-Path $out 'node-LICENSE.txt')
+          } else {
+            Invoke-WebRequest "https://raw.githubusercontent.com/nodejs/node/v$nodeVersion/LICENSE" -OutFile (Join-Path $out 'node-LICENSE.txt')
+          }
+
+          # Contrôle : le node.exe embarqué démarre et le code du capteur se charge.
+          & (Join-Path $out 'node.exe') --check (Join-Path $out 'listener.mjs')
+          if ($LASTEXITCODE -ne 0) { throw 'listener.mjs invalide avec le node.exe embarqué.' }
+
+          $zip = Join-Path $env:RUNNER_TEMP "$name.zip"
+          Compress-Archive -Path $out -DestinationPath $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path "$zip.sha256" -Value "$hash  $name.zip" -Encoding ascii
+          Write-Host "Paquet : $name.zip ($([math]::Round((Get-Item $zip).Length / 1MB, 1)) Mo), Node.js $nodeVersion"
+          Write-Host "SHA-256 : $hash"
+          "ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PKG_NAME=$name" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PKG_NAME }}
+          path: |
+            ${{ env.ZIP }}
+            ${{ env.ZIP }}.sha256
+          if-no-files-found: error
+
+      - name: Publication de la release
+        if: startsWith(github.ref, 'refs/tags/sensor-v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @"
+          Paquet Windows prêt à l'emploi du capteur passif CyberVeylix.
+
+          1. Téléchargez $env:PKG_NAME.zip et vérifiez son empreinte SHA-256 (fichier .sha256).
+          2. Clic droit sur le zip > Propriétés > cochez « Débloquer », puis « Extraire tout ».
+          3. Double-cliquez sur install.cmd et suivez les instructions.
+
+          Seul prérequis sur le PC : Npcap (https://npcap.com), proposé par l'installateur s'il manque.
+          "@
+          $tag = $env:GITHUB_REF_NAME
+          gh release view $tag --json tagName *> $null
+          if ($LASTEXITCODE -eq 0) {
+            # Release déjà créée (page GitHub) : on y joint le paquet, en remplaçant une version précédente du fichier.
+            gh release upload $tag $env:ZIP "$env:ZIP.sha256" --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Envoi du paquet vers la release impossible.' }
+            $body = (gh release view $tag --json body --jq .body | Out-String).Trim()
+            if (-not $body) { gh release edit $tag --notes $notes }
+          } else {
+            gh release create $tag $env:ZIP "$env:ZIP.sha256" --title "Capteur CyberVeylix $tag" --notes $notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Publication de la release impossible.' }

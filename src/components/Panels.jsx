@@ -1,5 +1,6 @@
+import { hourlyCounts } from '../lib/findings.js'
 import Donut from './Donut'
-import { KPIS, TYPES, STATUS, SEV, SLOTS } from '../constants'
+import { KPIS, STATUS, SEV } from '../constants'
 import { useI18n } from '../i18n/context.js'
 
 export function Banner() {
@@ -34,48 +35,50 @@ export function Kpis({ counts }) {
   )
 }
 
-export function NetworkMap({ devices, onAdd }) {
-  const { t } = useI18n()
+// Activité : alertes ENREGISTRÉES par heure sur 24 h (une seule série : la couleur du thème, pas de légende),
+// avec infobulle par barre et tableau équivalent pour les lecteurs d'écran.
+const barPath = (x, y, w, h, r) => {
+  const rr = Math.min(r, w / 2, h)
+  return `M${x},${y + h}V${y + rr}Q${x},${y} ${x + rr},${y}H${x + w - rr}Q${x + w},${y} ${x + w},${y + rr}V${y + h}Z`
+}
+export function Activity({ alerts = [], devices = [] }) {
+  const { t, locale } = useI18n()
+  const buckets = hourlyCounts(alerts)
+  const total = buckets.reduce((n, b) => n + b.n, 0)
+  const max = Math.max(1, ...buckets.map((b) => b.n))
+  const [x0, x1, y0, y1] = [34, 252, 12, 140]
+  const step = (x1 - x0) / buckets.length
+  const hour = (ms) => new Date(ms).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+  const online = devices.filter((d) => d.status === 'on').length
   return (
-    <div className="card map">
-      <h3>{t('map.title')} <span className="live" style={{ color: 'var(--m)' }}>● {t('map.offline')}</span></h3>
-      <div className="legend">
-        {Object.entries(TYPES).map(([ty, c]) => <div key={ty}><i style={{ background: c }} />{t(`type.${ty}`)}</div>)}
-        <div><i style={{ background: 'var(--r)' }} />{t('map.threat')}</div>
-      </div>
-      <svg className="mapsvg" viewBox="0 0 600 340" preserveAspectRatio="xMidYMid slice">
-        <g style={{ fill: 'var(--map-land)', stroke: 'var(--map-stroke)', opacity: 'var(--map-opacity)' }}><path d="M150 200l120-70 150 70-120 80z" /><path d="M270 130l120-60 140 60-110 70z" /><path d="M220 270l110-60 120 60-110 55z" /></g>
-        {!devices.length && <text x="300" y="200" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="14">{t('map.noDevices')}</text>}
-        {devices.map((d, i) => {
-          const [x, y] = SLOTS[i % SLOTS.length]
-          const st = STATUS.find((s) => s.k === d.status)
+    <div className="card activity-card">
+      <h3>{t('activity.title')}</h3>
+      <div className="m" style={{ margin: '4px 0 8px' }}>{t('activityLive.subtitle')}</div>
+      <svg viewBox="0 0 260 170" style={{ width: '100%' }} role="img" aria-label={t('activityLive.aria', { n: total })}>
+        <g style={{ stroke: 'var(--map-grid)' }} strokeWidth="1"><path d={`M${x0} ${y1}H${x1}M${x0} ${y0}H${x1}`} /></g>
+        <text x={x0 - 6} y={y1 + 3} textAnchor="end" fontSize="9" style={{ fill: 'var(--m)' }}>0</text>
+        <text x={x0 - 6} y={y0 + 3} textAnchor="end" fontSize="9" style={{ fill: 'var(--m)' }}>{max}</text>
+        {buckets.map((b, i) => {
+          const h = (b.n / max) * (y1 - y0)
+          const x = x0 + i * step + 1
           return (
-            <g key={i}>
-              <title>{d.name} — {d.ip || '—'}</title>
-              <circle cx={x} cy={y} r="9" style={{ fill: TYPES[d.type], stroke: st?.color }} strokeWidth="2" />
-              <text x={x} y={y + 22} textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="9">{d.name}</text>
+            <g key={b.at} className="act-bar">
+              <rect x={x0 + i * step} y={y0} width={step} height={y1 - y0} fill="transparent" />
+              {b.n > 0 && <path d={barPath(x, y1 - h, step - 2, h, 4)} style={{ fill: 'var(--chart)' }} />}
+              <title>{t('activityLive.barTitle', { hour: hour(b.at), n: b.n })}</title>
             </g>
           )
         })}
+        {buckets.map((b, i) => (i % 6 === 0 ? <text key={`l${b.at}`} x={x0 + i * step} y={y1 + 14} fontSize="9" style={{ fill: 'var(--m)' }}>{hour(b.at)}</text> : null))}
+        {total === 0 && <text x={(x0 + x1) / 2} y={(y0 + y1) / 2} textAnchor="middle" fontSize="10" style={{ fill: 'var(--m)' }}>{t('activityLive.empty')}</text>}
       </svg>
-      <div className="ctrl"><span style={{ cursor: 'pointer' }} title={t('map.addDevice')} onClick={onAdd}>+</span><span>◎</span><span>↻</span><span style={{ fontSize: 11 }}>3D</span></div>
-      <div className="site">📍 {t('map.site')}<br />—</div>
-    </div>
-  )
-}
-
-export function Activity() {
-  const { t } = useI18n()
-  return (
-    <div className="card">
-      <h3>{t('activity.title')} <span className="live" style={{ float: 'inline-end', color: 'var(--m)' }}>● —</span></h3>
-      <div className="m" style={{ textAlign: 'end', margin: '8px 0' }}>● {t('activity.inbound')} &nbsp;<span style={{ color: 'var(--pu)' }}>● {t('activity.outbound')}</span></div>
-      <svg viewBox="0 0 260 170" style={{ width: '100%' }}>
-        <g style={{ stroke: 'var(--map-grid)' }}><path d="M40 10h210M40 45h210M40 80h210M40 115h210M40 150h210" /></g>
-        <text x="145" y="85" textAnchor="middle" style={{ fill: 'var(--m)' }} fontSize="10">{t('activity.waiting')}</text>
-      </svg>
-      <div className="bw"><small>{t('activity.bandwidth')}</small><br /><b>—</b></div>
-      <div className="bw"><small>{t('activity.packets')}</small><br /><b>—</b></div>
+      <table className="sr-only">
+        <caption>{t('activityLive.subtitle')}</caption>
+        <thead><tr><th>{t('activityLive.hourCol')}</th><th>{t('activityLive.countCol')}</th></tr></thead>
+        <tbody>{buckets.map((b) => <tr key={b.at}><td>{hour(b.at)}</td><td>{b.n}</td></tr>)}</tbody>
+      </table>
+      <div className="bw"><small>{t('activityLive.alerts24')}</small><br /><b>{total}</b></div>
+      <div className="bw"><small>{t('activityLive.online')}</small><br /><b>{online}</b></div>
     </div>
   )
 }

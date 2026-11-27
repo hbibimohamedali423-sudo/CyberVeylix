@@ -5,9 +5,7 @@ dist
 .env.*
 !.env.example
 .DS_Store
+*.log
 
-agent/*.log
-
-agent/*.log
-
-agent/*.log
+agent/snmp.json
+agent/*.local.json

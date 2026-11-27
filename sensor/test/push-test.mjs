@@ -1,0 +1,297 @@
+// Tests de l'envoi au tableau de bord (lib/push.mjs) avec un faux client Supabase en mémoire.
+import assert from 'node:assert/strict'
+import { createPusher, isMissingColumn, scopeToUser } from '../lib/push.mjs'
+
+// Faux client : tables en mémoire ; `missing` liste les colonnes « absentes » (base sans R1),
+// `noSensors` simule l'absence de la table sensors.
+function fakeSupabase({ tables = {}, missing = [], noSensors = false, noReachability = false } = {}) {
+  const db = { networks: [], devices: [], alerts: [], vulnerabilities: [], services: [], sensors: [], vlan_reachability: [], ...tables }
+  let seq = 0
+  const calls = []
+  const colError = (rows) => {
+    for (const r of rows) for (const k of Object.keys(r)) {
+      if (missing.includes(k)) return { code: 'PGRST204', message: `Could not find the '${k}' column of 'x' in the schema cache` }
+    }
+    return null
+  }
+  const result = (value) => ({ then: (ok, ko) => Promise.resolve(value).then(ok, ko) })
+  function from(table) {
+    if (table === 'sensors' && noSensors) {
+      const err = { error: { code: 'PGRST205', message: "Could not find the table 'public.sensors' in the schema cache" } }
+      return { upsert: () => result(err), select: () => result(err) }
+    }
+    if (table === 'vlan_reachability' && noReachability) {
+      const err = { code: 'PGRST205', message: "Could not find the table 'public.vlan_reachability' in the schema cache" }
+      const q = { eq: () => q, then: (ok, ko) => Promise.resolve({ error: err }).then(ok, ko) }
+      return { delete: () => q, insert: () => result({ error: err }), select: () => result({ error: err }) }
+    }
+    const rows = db[table]
+    return {
+      select: () => result({ data: rows.map((r) => ({ ...r })), error: null }),
+      delete() {
+        const filters = []
+        const q = {
+          eq: (c, v) => { filters.push((r) => r[c] === v); return q },
+          then: (ok, ko) => {
+            calls.push(['delete', table, filters.length])
+            for (let i = rows.length - 1; i >= 0; i--) if (filters.every((f) => f(rows[i]))) rows.splice(i, 1)
+            return Promise.resolve({ error: null }).then(ok, ko)
+          },
+        }
+        return q
+      },
+      insert(list) {
+        calls.push(['insert', table, list])
+        const error = colError(list)
+        if (!error) for (const r of list) rows.push({ id: `id${++seq}`, status: 'open', ...r })
+        return result({ error })
+      },
+      upsert(list, { onConflict }) {
+        calls.push(['upsert', table, list])
+        const error = colError(list)
+        if (error) return result({ error })
+        const keys = onConflict.split(',').filter((k) => k !== 'user_id')
+        for (const r of list) {
+          const hit = rows.find((x) => keys.every((k) => x[k] === r[k]))
+          if (hit) Object.assign(hit, r)
+          else rows.push({ id: `id${++seq}`, status: 'open', ...r })
+        }
+        return result({ error: null })
+      },
+      update(patch) {
+        const filters = []
+        const q = {
+          in: (c, v) => { filters.push((r) => v.includes(r[c])); return q },
+          eq: (c, v) => { filters.push((r) => r[c] === v); return q },
+          neq: (c, v) => { filters.push((r) => r[c] !== v); return q },
+          then: (ok, ko) => {
+            for (const r of rows) if (filters.every((f) => f(r))) Object.assign(r, patch)
+            return Promise.resolve({ error: null }).then(ok, ko)
+          },
+        }
+        return q
+      },
+    }
+  }
+  return { from, db, calls }
+}
+
+const GW = 'AA-BB-CC-00-00-01'
+const base = () => ({
+  networks: [{ id: 'net-other', gateway_mac: '11:22:33:44:55:66' }, { id: 'net-bureau', gateway_mac: 'aa:bb:cc:00:00:01' }],
+  devices: [
+    { id: 'dev-cafe', ip: '192.168.1.20', network_id: 'net-other' },
+    { id: 'dev-nas', ip: '192.168.1.20', network_id: 'net-bureau' },
+  ],
+})
+const finding = (over) => ({
+  key: '192.168.1.20:445:smb1-enabled', rule: 'smb1-enabled', ip: '192.168.1.20', port: 445, service: 'smb',
+  severity: 'h', cves: ['CVE-2017-0144'], confidence: 'certaine', title: 'SMBv1 activé',
+  evidence: 'Négociation SMB1 acceptée.', remediation: 'Désactiver SMBv1.', ...over,
+})
+const quiet = () => {}
+const now = () => new Date('2026-11-24T10:00:00Z')
+
+export function pushChecks(check, checkAsync) {
+  check('Envoi : erreurs « colonne absente » reconnues (PostgREST et PostgreSQL)', () => {
+    assert.equal(isMissingColumn({ code: 'PGRST204', message: '' }), true)
+    assert.equal(isMissingColumn({ code: '42703', message: '' }), true)
+    assert.equal(isMissingColumn({ code: '42501', message: 'new row violates row-level security policy' }), false)
+    assert.equal(isMissingColumn(null), false)
+  })
+
+  checkAsync('Envoi : faiblesse détaillée, rattachée au réseau de la passerelle et au bon appareil', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    await p.syncVulnerabilities({ findings: [finding()] })
+    const [v] = sb.db.vulnerabilities
+    assert.equal(sb.db.vulnerabilities.length, 1)
+    assert.equal(v.network_id, 'net-bureau')
+    assert.equal(v.device_id, 'dev-nas') // même IP dans un autre réseau : ignorée
+    assert.deepEqual(v.cves, ['CVE-2017-0144'])
+    assert.equal(v.source, 'scan')
+    assert.equal(v.confidence, 'certaine')
+    assert.equal(v.last_seen, '2026-11-24T10:00:00.000Z')
+  })
+
+  checkAsync('Envoi : analyse suivante sans doublon, statut choisi par l\'utilisateur conservé', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    await p.syncVulnerabilities({ findings: [finding()] })
+    sb.db.vulnerabilities[0].status = 'ack'
+    await p.syncVulnerabilities({ findings: [finding({ evidence: 'Toujours là.' })] })
+    assert.equal(sb.db.vulnerabilities.length, 1)
+    assert.equal(sb.db.vulnerabilities[0].status, 'ack')
+    assert.equal(sb.db.vulnerabilities[0].evidence, 'Toujours là.')
+  })
+
+  checkAsync('Envoi : faiblesse disparue → « Résolue » ; réapparue → rouverte', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    const f = finding()
+    await p.syncVulnerabilities({ findings: [f] })
+    await p.syncVulnerabilities({ findings: [], fixed: [f] })
+    assert.equal(sb.db.vulnerabilities[0].status, 'resolved')
+    assert.equal(sb.db.vulnerabilities[0].resolved_at, '2026-11-24T10:00:00.000Z')
+    await p.syncVulnerabilities({ findings: [f] })
+    assert.equal(sb.db.vulnerabilities[0].status, 'open')
+    assert.equal(sb.db.vulnerabilities[0].resolved_at, null)
+  })
+
+  checkAsync('Envoi : base sans R1 → envoi réduit (titre, gravité, appareil), toujours sans doublon', async () => {
+    const sb = fakeSupabase({ tables: base(), missing: ['source', 'finding_key', 'kind', 'version'] })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    await p.syncVulnerabilities({ findings: [finding()] })
+    await p.syncVulnerabilities({ findings: [finding()] })
+    assert.equal(sb.db.vulnerabilities.length, 1)
+    assert.deepEqual(Object.keys(sb.db.vulnerabilities[0]).sort(), ['device_id', 'id', 'severity', 'status', 'title'])
+    await p.pushAlerts([{ type: 'gateway_spoof', severity: 'c', title: 'Usurpation', detail: 'x' }])
+    assert.equal(sb.db.alerts.length, 1)
+    assert.equal(sb.db.alerts[0].source, undefined)
+    assert.equal(p.r1, false)
+  })
+
+  checkAsync('Envoi : alertes avec origine (capteur / leurre / analyse) et type', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    await p.pushAlerts([
+      { type: 'rogue_dhcp', severity: 'c', ip: '192.168.1.20', title: 'DHCP pirate', detail: 'd' },
+      { type: 'honeypot_scan', severity: 'c', ip: '192.168.1.99', title: 'Balayage', detail: 'd' },
+      { type: 'vuln_fixed', severity: 'l', title: 'Corrigée', detail: 'd' },
+    ])
+    assert.deepEqual(sb.db.alerts.map((a) => a.source), ['sensor', 'honeypot', 'vuln_scan'])
+    assert.equal(sb.db.alerts[0].kind, 'rogue_dhcp')
+    assert.equal(sb.db.alerts[0].device_id, 'dev-nas')
+    assert.equal(sb.db.alerts[1].device_id, null) // appareil inconnu : rien d'inventé
+    assert.ok(sb.db.alerts.every((a) => a.network_id === 'net-bureau'))
+  })
+
+  checkAsync('Envoi : adresse source seulement quand elle désigne le fautif ; MAC toujours', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    await p.pushAlerts([
+      { type: 'honeypot_scan', severity: 'c', ip: '192.168.1.99', mac: 'aa:bb:cc:00:00:99', title: 'Balayage', detail: 'd' },
+      { type: 'rogue_dhcp', severity: 'c', ip: '192.168.1.20', mac: 'aa:bb:cc:00:00:20', title: 'DHCP', detail: 'd' },
+      // IP = celle de la passerelle imitée (la victime) : jamais proposée comme adresse à bloquer.
+      { type: 'gateway_spoof', severity: 'c', ip: '192.168.1.1', mac: 'de:ad:be:ef:00:01', title: 'Usurpation', detail: 'd' },
+      { type: 'arp_spoof_sweep', severity: 'h', ip: '192.168.1.5', mac: 'de:ad:be:ef:00:02', title: 'ARP', detail: 'd' },
+      { type: 'vuln_new', severity: 'h', title: 'Nouvelle faiblesse', detail: 'd' },
+    ])
+    assert.deepEqual(sb.db.alerts.map((a) => a.source_ip), ['192.168.1.99', '192.168.1.20', null, null, null])
+    assert.deepEqual(sb.db.alerts.map((a) => a.source_mac), ['aa:bb:cc:00:00:99', 'aa:bb:cc:00:00:20', 'de:ad:be:ef:00:01', 'de:ad:be:ef:00:02', null])
+  })
+
+  checkAsync('Envoi : base sans R4 → alertes envoyées sans adresse source, R1 conservé', async () => {
+    const logs = []
+    const sb = fakeSupabase({ tables: base(), missing: ['source_ip', 'source_mac'] })
+    const p = createPusher(sb, { gatewayMac: GW, log: (m) => logs.push(m), now })
+    await p.pushAlerts([{ type: 'honeypot_scan', severity: 'c', ip: '192.168.1.99', mac: 'aa:bb:cc:00:00:99', title: 'Balayage', detail: 'd' }])
+    await p.pushAlerts([{ type: 'new_device', severity: 'm', ip: '192.168.1.98', title: 'Nouveau', detail: 'd' }])
+    assert.equal(sb.db.alerts.length, 2)
+    assert.equal(sb.db.alerts[0].source, 'honeypot') // colonnes R1 toujours envoyées
+    assert.equal(sb.db.alerts[0].source_ip, undefined)
+    assert.equal(p.r1, true)
+    assert.equal(logs.filter((m) => m.includes('R4')).length, 1) // message une seule fois
+  })
+
+  check('lectures du capteur limitées à son compte (données partagées d\'autres comptes ignorées)', () => {
+    const calls = []
+    const builder = { select: (...a) => { calls.push(['select', ...a]); return { eq: (c, v) => { calls.push(['eq', c, v]); return 'filtré' } } }, update: (p) => { calls.push(['update', p]); return 'maj' }, insert: (r) => { calls.push(['insert', r]); return 'ins' } }
+    const scoped = scopeToUser({ auth: 'A', from: () => builder }, 'u-capteur')
+    assert.equal(scoped.from('devices').select('id,ip'), 'filtré')
+    assert.deepEqual(calls.slice(0, 2), [['select', 'id,ip'], ['eq', 'user_id', 'u-capteur']])
+    assert.equal(scoped.from('devices').update({ a: 1 }), 'maj') // écritures inchangées
+    assert.equal(scoped.from('devices').insert({ a: 1 }), 'ins')
+    assert.equal(scoped.auth, 'A')
+  })
+
+  checkAsync('Envoi : réseau inconnu → network_id vide (aucun réseau deviné)', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: '00:00:00:00:00:99', log: quiet, now })
+    await p.pushAlerts([{ type: 'new_device', severity: 'm', title: 't', detail: 'd' }])
+    assert.equal(sb.db.alerts[0].network_id, null)
+  })
+
+  checkAsync('Envoi : services d\'appareils inventoriés seulement, avec version', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    await p.syncServices([
+      { ip: '192.168.1.20', services: [{ port: 22, service: 'ssh', detail: 'OpenSSH_9.6p1' }] },
+      { ip: '192.168.1.77', services: [{ port: 80, service: 'http', detail: '' }] },
+    ])
+    assert.equal(sb.db.services.length, 1)
+    assert.equal(sb.db.services[0].device_id, 'dev-nas')
+    assert.equal(sb.db.services[0].version, 'OpenSSH_9.6p1')
+  })
+
+  checkAsync('Envoi : pouls du capteur sans doublon ; table absente → message unique, pas d\'erreur', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    await p.heartbeat({ name: 'PC-ACCUEIL', version: '0.5.0', honeypot: true, vulnScan: true })
+    await p.heartbeat({ name: 'PC-ACCUEIL', version: '0.5.0', honeypot: true, vulnScan: true, lastScanAt: '2026-11-24T09:00:00Z' })
+    assert.equal(sb.db.sensors.length, 1)
+    assert.equal(sb.db.sensors[0].network_id, 'net-bureau')
+    assert.equal(sb.db.sensors[0].last_scan_at, '2026-11-24T09:00:00Z')
+
+    const logs = []
+    const p2 = createPusher(fakeSupabase({ noSensors: true }), { log: (m) => logs.push(m), now })
+    await p2.heartbeat({ name: 'PC' })
+    await p2.heartbeat({ name: 'PC' })
+    assert.equal(logs.length, 1)
+  })
+
+  checkAsync('Envoi : atteignabilité VLAN enregistrée (statut, VLAN numérique, preuve), paires obsolètes retirées', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    const reachability = {
+      zones: [{ name: 'vlan10', vlan: 10 }, { name: 'vlan20', vlan: 20 }, { name: 'wan1', vlan: null }],
+      matrix: [
+        { from: 'vlan10', to: 'vlan20', allowed: true, evidence: [{ id: '1', name: 'Autoriser' }], reason: null },
+        { from: 'vlan20', to: 'vlan10', allowed: false, evidence: [], reason: 'aucune règle active ne correspond (refus par défaut)' },
+        { from: 'vlan10', to: 'wan1', allowed: null, evidence: [{ id: '2', name: 'x', reason: 'fqdn' }], reason: 'une ou plusieurs règles non résolues pourraient s\'appliquer' },
+      ],
+    }
+    await p.syncReachability(reachability)
+    assert.equal(sb.db.vlan_reachability.length, 3)
+    const row = sb.db.vlan_reachability.find((r) => r.from_zone === 'vlan10' && r.to_zone === 'vlan20')
+    assert.deepEqual([row.network_id, row.from_vlan, row.to_vlan, row.status, row.evidence], ['net-bureau', 10, 20, 'allowed', [{ id: '1', name: 'Autoriser' }]])
+    const uncertain = sb.db.vlan_reachability.find((r) => r.to_zone === 'wan1')
+    assert.deepEqual([uncertain.to_vlan, uncertain.status], [null, 'uncertain'])
+    const blocked = sb.db.vlan_reachability.find((r) => r.from_zone === 'vlan20')
+    assert.deepEqual([blocked.status, blocked.reason], ['blocked', 'aucune règle active ne correspond (refus par défaut)'])
+
+    // Interrogation suivante : vlan20 retiré du pare-feu → sa paire ne doit plus rester affichée.
+    await p.syncReachability({
+      zones: [{ name: 'vlan10', vlan: 10 }, { name: 'wan1', vlan: null }],
+      matrix: [{ from: 'vlan10', to: 'wan1', allowed: true, evidence: [], reason: null }],
+    })
+    assert.equal(sb.db.vlan_reachability.length, 1)
+    assert.equal(sb.db.vlan_reachability[0].to_zone, 'wan1')
+  })
+
+  checkAsync('Envoi : atteignabilité — table absente → message unique, pas d\'erreur ; réseau inconnu → rien écrit', async () => {
+    const logs = []
+    const sb = fakeSupabase({ tables: base(), noReachability: true })
+    const p = createPusher(sb, { gatewayMac: GW, log: (m) => logs.push(m), now })
+    const reachability = { zones: [{ name: 'a', vlan: 1 }, { name: 'b', vlan: 2 }], matrix: [{ from: 'a', to: 'b', allowed: true, evidence: [], reason: null }] }
+    await p.syncReachability(reachability)
+    await p.syncReachability(reachability)
+    assert.equal(logs.filter((m) => m.includes('vlan_reachability')).length, 1)
+
+    const sb2 = fakeSupabase({ tables: base() })
+    const p2 = createPusher(sb2, { gatewayMac: '00:00:00:00:00:99', log: quiet, now })
+    await p2.syncReachability(reachability)
+    assert.equal(sb2.db.vlan_reachability.length, 0)
+    assert.equal(sb2.calls.some((c) => c[1] === 'vlan_reachability'), false)
+  })
+
+  checkAsync('Envoi : MAC de passerelle apprise après le démarrage (fonction)', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    let mac = null
+    const p = createPusher(sb, { gatewayMac: () => mac, log: quiet, now })
+    await p.pushAlerts([{ type: 'new_device', severity: 'm', title: 'a', detail: 'd' }])
+    mac = GW
+    await p.pushAlerts([{ type: 'new_device', severity: 'm', title: 'b', detail: 'd' }])
+    assert.deepEqual(sb.db.alerts.map((a) => a.network_id), [null, 'net-bureau'])
+  })
+}

@@ -1,0 +1,3 @@
+# Données du réseau surveillé (appareils, MAC, alertes) : propres à chaque client, jamais dans Git.
+data/
+node_modules/

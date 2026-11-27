@@ -36,7 +36,9 @@ function Card({ title, onAdd, badge = 0, cls = '', children }) {
 
 const Empty = ({ text }) => <p className="m" style={{ padding: '22px 0', textAlign: 'center' }}>{text}</p>
 
-export default function RightColumn({ alerts, threats, onAddAlert, onAddThreat }) {
+const REPORT_KINDS = ['devices', 'alerts', 'vulnerabilities', 'threats', 'security']
+
+export default function RightColumn({ alerts, threats, reports = [], onAddAlert, onAddThreat, onOpenReports }) {
   const { t, locale } = useI18n()
   const visible = alerts.filter((a) => stateOf(a) !== 'resolved').sort(newestFirst).slice(0, 4)
   const openCount = alerts.filter((a) => stateOf(a) === 'open').length
@@ -47,17 +49,27 @@ export default function RightColumn({ alerts, threats, onAddAlert, onAddThreat }
   return (
     <aside>
       <Card title={t('right.alertsTitle')} cls="alerts-card" badge={openCount} onAdd={onAddAlert}>
-        {visible.length ? visible.map((a) => (
-          <div className="row" key={a.id}>
-            <div className="ic" style={{ borderColor: SEV.find((s) => s.k === a.severity)?.color, width: 34, height: 34 }} />
-            <div>
-              <b>{a.title}</b>
-              <small>{a.detail}</small>
-              {stateOf(a) === 'ack' && <small style={{ display: 'block', color: 'var(--warning-ink)' }}>{t('right.acknowledged')}</small>}
+        {visible.length ? visible.map((a) => {
+          const sev = SEV.find((s) => s.k === a.severity)
+          const sevColor = sev?.color || 'var(--m)'
+          const when = a.created_at ? hm(a.created_at, locale) : null
+          return (
+            <div className="row alert-row" key={a.id}>
+              <span className="sev-mark" style={{ background: sevColor, color: sevColor }} aria-hidden="true" />
+              <div className="alert-body">
+                <div className="alert-meta">
+                  <span className="alert-sev" style={{ color: sevColor }}>
+                    {sev ? t(`sev.${a.severity}`) : (a.severity || '—')}
+                  </span>
+                  {when && <small>{when}</small>}
+                </div>
+                <b>{a.title}</b>
+                {a.detail && <small>{a.detail}</small>}
+                {stateOf(a) === 'ack' && <small className="alert-ack">{t('right.acknowledged')}</small>}
+              </div>
             </div>
-            <small>{hm(a.created_at, locale)}</small>
-          </div>
-        )) : <Empty text={alerts.length ? t('right.noOpenAlerts') : t('right.noAlerts')} />}
+          )
+        }) : <Empty text={alerts.length ? t('right.noOpenAlerts') : t('right.noAlerts')} />}
       </Card>
       <Card title={t('right.threatsTitle')} onAdd={onAddThreat}>
         {counts.length ? counts.slice(0, 5).map((c) => (
@@ -67,7 +79,20 @@ export default function RightColumn({ alerts, threats, onAddAlert, onAddThreat }
           </div>
         )) : <Empty text={t('right.noThreats')} />}
       </Card>
-      <Card title={t('right.reportsTitle')}><Empty text={t('right.noReports')} /></Card>
+      <Card title={t('right.reportsTitle')}>
+        {reports.length ? (
+          <ul className="right-reports">
+            {reports.slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 5).map((r) => (
+              <li key={r.id}>
+                <button type="button" onClick={onOpenReports}>
+                  <b>{r.kind === 'security' ? t('reportKind.security') : REPORT_KINDS.includes(r.kind) ? t('reportExtra.listLabel', { what: t(`reportKind.${r.kind}`) }) : r.kind}</b>
+                  <span className="m"> · {t('reportExtra.rows', { n: r.row_count })} · {new Date(r.created_at).toLocaleString(locale)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : <Empty text={t('right.noReports')} />}
+      </Card>
     </aside>
   )
 }
