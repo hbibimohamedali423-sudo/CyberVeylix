@@ -21,25 +21,38 @@ pas le code ni l'historique Git : il n'affirme que ce qui est réellement commit
   comportement sur TOUT le réseau, pas seulement le segment du capteur.
 - **Détection réseau-large sur Cisco/SNMP** (`cisco-behavior.mjs`) : une adresse MAC apprise par
   plusieurs switchs à la fois (clonage/usurpation, ou usurpation de la passerelle elle-même).
+- **Analyse d'atteignabilité VLAN-à-VLAN** (`sensor/lib/reachability.mjs`) : à partir des règles
+  de pare-feu FortiGate + objets/groupes d'adresses, calcule « le VLAN A peut-il joindre le
+  VLAN B ? » avec la règle exacte comme preuve. Trois résultats : autorisé / bloqué / incertain
+  (adresse non résolvable qui pourrait changer la réponse). Respecte l'ordre réel d'évaluation
+  des règles FortiGate (première correspondance gagne — une première version ignorait cet ordre
+  et a été corrigée avant tout test). 21 tests dédiés, y compris les cas d'ordre de règles.
+  **Calculée et journalisée uniquement pour l'instant** (console du capteur) — pas encore
+  enregistrée ni affichée dans le tableau de bord (voir ci-dessous).
 
 Capteur publié : version 0.13.3 (voir `sensor/package.json`). **Pas encore testé sur un vrai
 pare-feu/switch réel** — construit et vérifié par des exemples seulement, à confirmer au premier
 essai sur le réseau Meridiana.
 
-## 🚧 En cours — PAS testé, PAS commité
+## 🚧 En cours
 
-**Analyse de portée (« si cet appareil est compromis, qu'est-ce qu'il peut atteindre ? »).**
-Décision et détail complet dans la mémoire Claude du projet (note
-`prochaine-fonctionnalite-segmentation`). État exact au moment de la pause :
-- `fortigate-parse.mjs` / `fortigate.mjs` modifiés (nouvelles lectures : objets adresse, groupes
-  d'adresses, règles de pare-feu — toujours en lecture seule) mais **sans aucun test**.
-- Reste à faire, dans l'ordre : créer `reachability.mjs` (résolution des adresses + matrice
-  VLAN→VLAN avec preuve), écrire les tests, lancer lint/tests/build, puis seulement commiter.
-- L'affichage dans le tableau de bord viendra après, comme étape séparée.
+Rien en cours de construction actuellement — la dernière étape (atteignabilité VLAN) est
+terminée, testée (238/238) et commitée. En attente d'une décision utilisateur avant de continuer
+(voir « Prochaine étape » ci-dessous).
 
-## ⏭️ Prochaine étape unique
+## ⏭️ Prochaine étape (au choix de l'utilisateur)
 
-Finir l'analyse de portée ci-dessus. Rien d'autre tant qu'elle n'est pas terminée et testée.
+L'analyse d'atteignabilité VLAN est calculée mais invisible pour l'instant (console seulement).
+Pour qu'elle serve réellement, il faut, dans l'ordre :
+1. Proposer une nouvelle table Supabase (SQL dans un fichier séparé, à approuver — aucune
+   modification de schéma ne sera appliquée sans accord explicite, règle du projet).
+2. Enregistrer la matrice calculée dans cette table à chaque interrogation du pare-feu.
+3. Construire la page du tableau de bord qui l'affiche.
+
+Pistes additionnelles déjà discutées et notées en mémoire, pas encore commencées : détection de
+règles de pare-feu mortes/trop larges, détection de point unique de défaillance (switch/lien) à
+partir de la topologie déjà lue, classement des appareils par « rayon d'impact », diagnostic
+« la règle autorise mais aucun chemin réel n'existe ».
 
 ## ⏳ En attente du côté de l'utilisateur (rien à coder)
 
