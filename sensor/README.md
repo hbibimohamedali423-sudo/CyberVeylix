@@ -183,10 +183,12 @@ d'évaluation du pare-feu, référence une adresse non résolvable — ex. un FQ
 réponse). Volontairement limité au VLAN-à-VLAN (pas de simulation du routage, du NAT ni des ACL de
 switch) pour que chaque conclusion reste traçable à une donnée réellement lue.
 
-Pour l'instant seulement **calculée et journalisée** dans la console du capteur ; son enregistrement et
-son affichage dans le tableau de bord sont une étape séparée, pas encore faite (nécessite une nouvelle
-table Supabase, à proposer en SQL et à faire approuver avant toute application, conformément aux règles
-du projet).
+Calculée et journalisée dans la console du capteur. Avec `--push` et la table `vlan_reachability`
+créée (voir `supabase/schema_r9_reachability.sql`, à exécuter manuellement : aucun schéma n'est
+appliqué automatiquement), la matrice complète est aussi enregistrée dans le tableau de bord à chaque
+interrogation — une paire disparue (VLAN retiré du pare-feu) n'y reste jamais affichée comme à jour.
+Sans cette table, le calcul et le journal continuent normalement ; un seul message le signale.
+L'affichage dans une page du tableau de bord reste une étape séparée, pas encore faite.
 
 ## Alertes instantanées sur téléphone (Telegram)
 Facultatif. Avec `notify.json` dans le dossier de données (créé par l'installateur : jeton vérifié auprès de

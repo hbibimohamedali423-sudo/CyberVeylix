@@ -218,6 +218,45 @@ export function createPusher(client, { gatewayMac = null, log = console.log, now
     if (error) log('⚠ Services non envoyés : ' + error.message)
   }
 
+  // Atteignabilité VLAN-à-VLAN (table vlan_reachability de R9, voir sensor/lib/reachability.mjs).
+  // Remplace, pour ce réseau, l'état complet de la matrice calculée à cette interrogation (comme les
+  // liens de topologie) : une paire disparue du calcul (VLAN retiré) ne reste jamais affichée comme
+  // à jour. Table absente (R9 pas encore exécuté) : message unique, pas d'erreur.
+  let reachabilityMissing = false
+  async function syncReachability(reachability) {
+    if (reachabilityMissing || !reachability || !reachability.matrix.length) return
+    const net = await networkId()
+    if (!net) return // réseau introuvable : rien n'est créé ni deviné
+    const vlanOf = new Map(reachability.zones.map((z) => [z.name, z.vlan]))
+    const stamp = now().toISOString()
+    const rows = reachability.matrix.map((m) => ({
+      network_id: net,
+      from_zone: m.from,
+      to_zone: m.to,
+      from_vlan: vlanOf.get(m.from) ?? null,
+      to_vlan: vlanOf.get(m.to) ?? null,
+      status: m.allowed === true ? 'allowed' : m.allowed === false ? 'blocked' : 'uncertain',
+      reason: m.reason || null,
+      evidence: m.evidence && m.evidence.length ? m.evidence : null,
+      source: 'fortigate',
+      computed_at: stamp,
+    }))
+    const del = await client.from('vlan_reachability').delete().eq('network_id', net).eq('source', 'fortigate')
+    if (del.error) {
+      if (isMissingTable(del.error)) {
+        reachabilityMissing = true
+        log('  (table vlan_reachability absente : atteignabilité non enregistrée ; exécutez supabase/schema_r9_reachability.sql)')
+      } else {
+        log('⚠ Atteignabilité non enregistrée : ' + del.error.message)
+      }
+      return
+    }
+    for (let i = 0; i < rows.length; i += 200) {
+      const r = await client.from('vlan_reachability').insert(rows.slice(i, i + 200))
+      if (r.error) { log('⚠ Atteignabilité non enregistrée : ' + r.error.message); return }
+    }
+  }
+
   // Pouls du capteur (table sensors de R1). Sans R1 : ignoré silencieusement après un message.
   let sensorsMissing = false
   async function heartbeat(info) {
@@ -238,5 +277,5 @@ export function createPusher(client, { gatewayMac = null, log = console.log, now
     }
   }
 
-  return { pushAlerts, syncVulnerabilities, syncServices, heartbeat, client, get r1() { return r1 } }
+  return { pushAlerts, syncVulnerabilities, syncServices, syncReachability, heartbeat, client, get r1() { return r1 } }
 }

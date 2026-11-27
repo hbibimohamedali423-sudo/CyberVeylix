@@ -4,8 +4,8 @@ import { createPusher, isMissingColumn, scopeToUser } from '../lib/push.mjs'
 
 // Faux client : tables en mémoire ; `missing` liste les colonnes « absentes » (base sans R1),
 // `noSensors` simule l'absence de la table sensors.
-function fakeSupabase({ tables = {}, missing = [], noSensors = false } = {}) {
-  const db = { networks: [], devices: [], alerts: [], vulnerabilities: [], services: [], sensors: [], ...tables }
+function fakeSupabase({ tables = {}, missing = [], noSensors = false, noReachability = false } = {}) {
+  const db = { networks: [], devices: [], alerts: [], vulnerabilities: [], services: [], sensors: [], vlan_reachability: [], ...tables }
   let seq = 0
   const calls = []
   const colError = (rows) => {
@@ -20,9 +20,26 @@ function fakeSupabase({ tables = {}, missing = [], noSensors = false } = {}) {
       const err = { error: { code: 'PGRST205', message: "Could not find the table 'public.sensors' in the schema cache" } }
       return { upsert: () => result(err), select: () => result(err) }
     }
+    if (table === 'vlan_reachability' && noReachability) {
+      const err = { code: 'PGRST205', message: "Could not find the table 'public.vlan_reachability' in the schema cache" }
+      const q = { eq: () => q, then: (ok, ko) => Promise.resolve({ error: err }).then(ok, ko) }
+      return { delete: () => q, insert: () => result({ error: err }), select: () => result({ error: err }) }
+    }
     const rows = db[table]
     return {
       select: () => result({ data: rows.map((r) => ({ ...r })), error: null }),
+      delete() {
+        const filters = []
+        const q = {
+          eq: (c, v) => { filters.push((r) => r[c] === v); return q },
+          then: (ok, ko) => {
+            calls.push(['delete', table, filters.length])
+            for (let i = rows.length - 1; i >= 0; i--) if (filters.every((f) => f(rows[i]))) rows.splice(i, 1)
+            return Promise.resolve({ error: null }).then(ok, ko)
+          },
+        }
+        return q
+      },
       insert(list) {
         calls.push(['insert', table, list])
         const error = colError(list)
@@ -221,6 +238,51 @@ export function pushChecks(check, checkAsync) {
     await p2.heartbeat({ name: 'PC' })
     await p2.heartbeat({ name: 'PC' })
     assert.equal(logs.length, 1)
+  })
+
+  checkAsync('Envoi : atteignabilité VLAN enregistrée (statut, VLAN numérique, preuve), paires obsolètes retirées', async () => {
+    const sb = fakeSupabase({ tables: base() })
+    const p = createPusher(sb, { gatewayMac: GW, log: quiet, now })
+    const reachability = {
+      zones: [{ name: 'vlan10', vlan: 10 }, { name: 'vlan20', vlan: 20 }, { name: 'wan1', vlan: null }],
+      matrix: [
+        { from: 'vlan10', to: 'vlan20', allowed: true, evidence: [{ id: '1', name: 'Autoriser' }], reason: null },
+        { from: 'vlan20', to: 'vlan10', allowed: false, evidence: [], reason: 'aucune règle active ne correspond (refus par défaut)' },
+        { from: 'vlan10', to: 'wan1', allowed: null, evidence: [{ id: '2', name: 'x', reason: 'fqdn' }], reason: 'une ou plusieurs règles non résolues pourraient s\'appliquer' },
+      ],
+    }
+    await p.syncReachability(reachability)
+    assert.equal(sb.db.vlan_reachability.length, 3)
+    const row = sb.db.vlan_reachability.find((r) => r.from_zone === 'vlan10' && r.to_zone === 'vlan20')
+    assert.deepEqual([row.network_id, row.from_vlan, row.to_vlan, row.status, row.evidence], ['net-bureau', 10, 20, 'allowed', [{ id: '1', name: 'Autoriser' }]])
+    const uncertain = sb.db.vlan_reachability.find((r) => r.to_zone === 'wan1')
+    assert.deepEqual([uncertain.to_vlan, uncertain.status], [null, 'uncertain'])
+    const blocked = sb.db.vlan_reachability.find((r) => r.from_zone === 'vlan20')
+    assert.deepEqual([blocked.status, blocked.reason], ['blocked', 'aucune règle active ne correspond (refus par défaut)'])
+
+    // Interrogation suivante : vlan20 retiré du pare-feu → sa paire ne doit plus rester affichée.
+    await p.syncReachability({
+      zones: [{ name: 'vlan10', vlan: 10 }, { name: 'wan1', vlan: null }],
+      matrix: [{ from: 'vlan10', to: 'wan1', allowed: true, evidence: [], reason: null }],
+    })
+    assert.equal(sb.db.vlan_reachability.length, 1)
+    assert.equal(sb.db.vlan_reachability[0].to_zone, 'wan1')
+  })
+
+  checkAsync('Envoi : atteignabilité — table absente → message unique, pas d\'erreur ; réseau inconnu → rien écrit', async () => {
+    const logs = []
+    const sb = fakeSupabase({ tables: base(), noReachability: true })
+    const p = createPusher(sb, { gatewayMac: GW, log: (m) => logs.push(m), now })
+    const reachability = { zones: [{ name: 'a', vlan: 1 }, { name: 'b', vlan: 2 }], matrix: [{ from: 'a', to: 'b', allowed: true, evidence: [], reason: null }] }
+    await p.syncReachability(reachability)
+    await p.syncReachability(reachability)
+    assert.equal(logs.filter((m) => m.includes('vlan_reachability')).length, 1)
+
+    const sb2 = fakeSupabase({ tables: base() })
+    const p2 = createPusher(sb2, { gatewayMac: '00:00:00:00:00:99', log: quiet, now })
+    await p2.syncReachability(reachability)
+    assert.equal(sb2.db.vlan_reachability.length, 0)
+    assert.equal(sb2.calls.some((c) => c[1] === 'vlan_reachability'), false)
   })
 
   checkAsync('Envoi : MAC de passerelle apprise après le démarrage (fonction)', async () => {
